@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Personal Finance ERP</title>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--ink:#172033;--muted:#667085;--line:#e5e9f0;--accent:#2457d6}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px system-ui,Segoe UI,Arial}
+header{background:#15233c;color:white;padding:22px 26px}header h1{margin:0 0 5px;font-size:22px}header p{margin:0;color:#cbd5e1}
+main{padding:22px;max-width:1400px;margin:auto}.grid{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:0 2px 8px #15233c08}
+.metric{font-size:24px;font-weight:700;margin-top:8px}.muted{color:var(--muted)}.row{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-top:14px}
+h2{font-size:16px;margin:0 0 12px}.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+button,label.file{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:9px 13px;cursor:pointer;font-weight:600}
+button.secondary{background:#e9eefb;color:#173b91}input[type=file]{display:none}select,input{padding:8px;border:1px solid var(--line);border-radius:7px;background:white}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:600}
+canvas{width:100%;height:230px}.note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:12px}
+.status{padding:8px 10px;background:#edf7f0;color:#17663b;border-radius:8px;display:inline-block}
+@media(max-width:850px){.grid{grid-template-columns:repeat(2,1fr)}.row{grid-template-columns:1fr}}@media(max-width:480px){.grid{grid-template-columns:1fr}}
+</style></head><body>
+<header><h1>Personal Finance ERP</h1><p>Manager.io Desktop companion dashboard · INR ₹</p></header>
+<main>
+<div class="toolbar">
+<label class="file">Import transactions CSV<input id="csvFile" type="file" accept=".csv,text/csv"></label>
+<button class="secondary" id="sample">Load sample data</button>
+<button class="secondary" id="export">Export dashboard data</button>
+<button id="refresh">Refresh Manager bank accounts</button>
+<span id="status" class="status">CSV dashboard ready</span>
+</div>
+<section class="grid">
+<div class="card"><div class="muted">Income (imported period)</div><div id="income" class="metric">₹0</div></div>
+<div class="card"><div class="muted">Expenses (imported period)</div><div id="expense" class="metric">₹0</div></div>
+<div class="card"><div class="muted">Net cash movement</div><div id="net" class="metric">₹0</div></div>
+<div class="card"><div class="muted">Transactions imported</div><div id="count" class="metric">0</div></div>
+</section>
+<section class="row">
+<div class="card"><h2>Monthly income vs expenses</h2><canvas id="monthly" width="900" height="260"></canvas></div>
+<div class="card"><h2>Expense by category</h2><canvas id="category" width="600" height="260"></canvas></div>
+</section>
+<section class="row">
+<div class="card"><h2>Manager.io bank / cash accounts</h2><div id="accounts" class="muted">Click Refresh Manager bank accounts from inside Manager.</div><p class="note">This uses Manager's documented extension API to read bank/cash account records. It does not import bank statements or initiate payments.</p></div>
+<div class="card"><h2>Upcoming / planning checklist</h2><table><tbody>
+<tr><td>Salary date</td><td>Maintain in Cash Plan template</td></tr>
+<tr><td>Credit card due date</td><td>Maintain in Credit Cards template</td></tr>
+<tr><td>FD maturity</td><td>Maintain in Investments template</td></tr>
+<tr><td>SIP / loan instalments</td><td>Maintain in Cash Plan template</td></tr>
+</tbody></table><p class="note">Approval workflow and automatic bank matching are not enabled by this starter dashboard. Use the controlled process in README before automating write actions.</p></div>
+</section>
+<section class="card" style="margin-top:14px"><h2>Imported transaction preview</h2><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Type</th><th>Amount</th><th>Account</th></tr></thead><tbody id="transactions"><tr><td colspan="6" class="muted">Import the Transactions_Template.csv file to begin.</td></tr></tbody></table></div></section>
+<p class="note">Privacy: CSV data is processed in this browser frame and stored only in this browser's local storage if available. Do not use this dashboard on a shared/public Windows profile. Back up your Manager business separately.</p>
+</main>
+<script>
+const fmt=n=>'₹'+Number(n||0).toLocaleString('en-IN',{maximumFractionDigits:2});
+let rows=[];
+const $=id=>document.getElementById(id);
+function setStatus(s){$('status').textContent=s}
+function parseCSV(text){
+ const lines=text.replace(/\r/g,'').split('\n').filter(x=>x.trim()); if(!lines.length)return [];
+ const parseLine=line=>{let a=[],v='',q=false;for(let i=0;i<line.length;i++){let c=line[i];if(c=='"'&&line[i+1]=='"'&&q){v+='"';i++}else if(c=='"')q=!q;else if(c==','&&!q){a.push(v);v=''}else v+=c}a.push(v);return a};
+ const h=parseLine(lines.shift()).map(x=>x.trim().toLowerCase());
+ return lines.map(l=>{let a=parseLine(l),o={};h.forEach((k,i)=>o[k]=(a[i]||'').trim());return o})
+ .map(o=>({date:o.date||o.transaction_date||'',description:o.description||'',category:o.category||'Uncategorised',type:(o.type||'expense').toLowerCase(),amount:Math.abs(Number((o.amount||'0').replace(/,/g,''))),account:o.account||''}))
+ .filter(x=>x.date&&Number.isFinite(x.amount));
+}
+function drawBars(canvas,labels,sets){
+ const c=canvas.getContext('2d'),w=canvas.width,h=canvas.height;c.clearRect(0,0,w,h);const max=Math.max(1,...sets.flatMap(s=>s.values));
+ const left=48,bottom=h-35,top=15,plotH=bottom-top,plotW=w-left-15;
+ c.strokeStyle='#e5e9f0';c.fillStyle='#667085';c.font='12px Arial';
+ for(let i=0;i<5;i++){let y=top+plotH*i/4;c.beginPath();c.moveTo(left,y);c.lineTo(w-10,y);c.stroke()}
+ const group=plotW/Math.max(1,labels.length),bw=Math.min(28,group/(sets.length+1));
+ labels.forEach((lab,i)=>{sets.forEach((s,j)=>{let v=s.values[i]||0,bh=v/max*(plotH-8),x=left+i*group+group/2+(j-(sets.length-1)/2)*(bw+4)-bw/2;c.fillStyle=s.color;c.fillRect(x,bottom-bh,bw,bh)});c.fillStyle='#667085';c.textAlign='center';c.fillText(lab,left+i*group+group/2,bottom+19)});
+}
+function drawDonut(canvas,items){const c=canvas.getContext('2d'),w=canvas.width,h=canvas.height;c.clearRect(0,0,w,h);let total=items.reduce((a,x)=>a+x[1],0)||1,start=-Math.PI/2;const colors=['#2457d6','#13a078','#e29a32','#a05bd4','#dc5b68','#568caa','#8993a4'];items.slice(0,7).forEach((x,i)=>{let end=start+x[1]/total*Math.PI*2;c.beginPath();c.moveTo(175,125);c.arc(175,125,88,start,end);c.closePath();c.fillStyle=colors[i];c.fill();start=end});c.font='12px Arial';c.fillStyle='#172033';items.slice(0,7).forEach((x,i)=>{c.fillStyle=colors[i];c.fillRect(300,25+i*29,12,12);c.fillStyle='#172033';c.fillText(x[0]+' '+fmt(x[1]),320,36+i*29)})}
+function render(){
+ const inc=rows.filter(x=>['income','receipt','salary'].includes(x.type)).reduce((a,x)=>a+x.amount,0);
+ const exp=rows.filter(x=>['expense','payment'].includes(x.type)).reduce((a,x)=>a+x.amount,0);
+ $('income').textContent=fmt(inc);$('expense').textContent=fmt(exp);$('net').textContent=fmt(inc-exp);$('count').textContent=rows.length;
+ const months=[...new Set(rows.map(x=>x.date.slice(0,7)))].sort().slice(-8);
+ const sum=(m,t)=>rows.filter(x=>x.date.slice(0,7)===m&&t.includes(x.type)).reduce((a,x)=>a+x.amount,0);
+ drawBars($('monthly'),months.map(x=>x.slice(2)),[{values:months.map(m=>sum(m,['income','receipt','salary'])),color:'#2457d6'},{values:months.map(m=>sum(m,['expense','payment'])),color:'#e29a32'}]);
+ const cats={};rows.filter(x=>['expense','payment'].includes(x.type)).forEach(x=>cats[x.category]=(cats[x.category]||0)+x.amount);
+ drawDonut($('category'),Object.entries(cats).sort((a,b)=>b[1]-a[1]));
+ $('transactions').innerHTML=rows.slice(-30).reverse().map(x=>`<tr><td>${esc(x.date)}</td><td>${esc(x.description)}</td><td>${esc(x.category)}</td><td>${esc(x.type)}</td><td>${fmt(x.amount)}</td><td>${esc(x.account)}</td></tr>`).join('')||'<tr><td colspan="6">No transactions</td></tr>';
+ try{localStorage.setItem('pferp_rows',JSON.stringify(rows))}catch(e){}
+}
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+$('csvFile').addEventListener('change',async e=>{let f=e.target.files[0];if(!f)return;rows=parseCSV(await f.text());render();setStatus(rows.length+' rows imported from '+f.name)});
+$('sample').onclick=()=>{rows=parseCSV('date,description,category,type,amount,account\n2026-11-01,Salary,Salary,income,65000,HDFC Savings\n2026-11-03,Groceries,Groceries,expense,4500,HDFC Savings\n2026-11-05,Electricity,Utilities,expense,1800,HDFC Savings\n2026-11-07,Credit card bill,Credit Card,payment,12000,HDFC Savings\n2026-11-10,FD interest,Interest,income,850,HDFC Savings');render();setStatus('Sample data loaded — replace with your own CSV')};
+$('export').onclick=()=>{let head='date,description,category,type,amount,account\n';let body=rows.map(x=>[x.date,x.description,x.category,x.type,x.amount,x.account].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([head+body],{type:'text/csv'}));a.download='Personal_Finance_Transactions_Export.csv';a.click();URL.revokeObjectURL(a.href)};
+function pm(message,timeout=12000){return new Promise((resolve,reject)=>{let id=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random());let timer=setTimeout(()=>{window.removeEventListener('message',fn);reject(Error('Manager API timeout. Open this page as an Extension inside Manager.io.'))},timeout);function fn(e){if(e.data?.requestId===id&&e.data?.type==='api-request-response'){clearTimeout(timer);window.removeEventListener('message',fn);resolve(e.data.body)}}window.addEventListener('message',fn);window.parent.postMessage({...message,requestId:id},'*')})}
+$('refresh').onclick=async()=>{try{setStatus('Connecting to Manager…');let data=await pm({type:'api-request',method:'GET',path:'/api4/bank-or-cash-accounts'});let arr=Array.isArray(data)?data:(data?.items||[]);$('accounts').innerHTML=arr.length?'<table><thead><tr><th>Account</th><th>Record details</th></tr></thead><tbody>'+arr.map(a=>'<tr><td>'+esc(a.name||a.Name||'Unnamed account')+'</td><td class="muted">'+esc(a.currency||a.Currency||'')+'</td></tr>').join('')+'</tbody></table>':'API connected; no account rows returned. Check current Manager API response schema.';setStatus('Manager account list refreshed')}catch(e){setStatus(e.message);$('accounts').textContent=e.message}};
+try{rows=JSON.parse(localStorage.getItem('pferp_rows')||'[]')}catch(e){rows=[]}render();
+</script></body></html>
