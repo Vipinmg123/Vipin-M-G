@@ -30,7 +30,7 @@ button.s{background:#e9eefb;color:#173b91}button.x{background:transparent;color:
 .note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:10px}
 @media(max-width:850px){.row{grid-template-columns:1fr}}
 </style></head><body>
-<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
+<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · build v4 · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
 <main>
 <section class="kpis" id="kpis"></section>
 
@@ -166,7 +166,7 @@ function parseTable(text){const lines=text.replace(/\r/g,'').split('\n').filter(
  return{h,col,data:rows.slice(hi+1)}}
 function applyAccounts(list){ // list: [{name,ctrl,actual,avail}]
  const cash=[],cards=[];
- list.forEach(a=>{if(!a.name)return;const isCard=/credit card/i.test(a.ctrl||'')||(!a.ctrl&&/credit card/i.test(a.name));
+ list.forEach(a=>{if(!a.name)return;const isCard=/credit card/i.test(a.ctrl||'')||/credit card/i.test(a.name);
   if(isCard){const prev=D.cards.find(r=>r.name===a.name)||{};const out=-a.actual;
    const limit=a.avail!=null&&a.avail!==''?Math.round((out+Number(a.avail))*100)/100:(prev.limit||0);
    cards.push({name:a.name,amount:Math.round(out*100)/100,limit,due:prev.due||''})}
@@ -174,28 +174,30 @@ function applyAccounts(list){ // list: [{name,ctrl,actual,avail}]
  if(!cash.length&&!cards.length)return false;D.cash=cash;D.cards=cards;buildEditor();render();return true}
 function toArr(b){if(Array.isArray(b))return b;if(b&&typeof b==='object'){for(const k of ['items','data','accounts','rows','results'])if(Array.isArray(b[k]))return b[k]}return[]}
 const num=(o,keys)=>{for(const k of keys)if(o[k]!=null&&o[k]!==''&&isFinite(Number(o[k])))return Number(o[k]);return null};
-function fromApi(arr){return arr.map(a=>({name:a.name||a.Name||a.title||'',ctrl:(a.controlAccount&&(a.controlAccount.name||a.controlAccount))||a.ControlAccount||a.controlAccountName||'',
- actual:num(a,['actualBalance','ActualBalance','balance','Balance','clearedBalance','ClearedBalance']),avail:num(a,['availableCredit','AvailableCredit'])}))}
-async function tryLive(){
+const href=l=>l&&(l.href||(l[0]&&l[0].href))||'';
+function deepFind(o,re,d){d=d||0;if(!o||typeof o!=='object'||d>4)return null;for(const k of Object.keys(o)){if(k==='_links'||k==='_actions')continue;const v=o[k];if(re.test(k)&&v!=null&&v!==''&&typeof v!=='object'&&isFinite(Number(v)))return Number(v);if(v&&typeof v==='object'){const r=deepFind(v,re,d+1);if(r!=null)return r}}return null}
+function fromApi(arr){return arr.map(a=>{const it=a.item||a,c=it.controlAccount;
+ const act=deepFind(a,/^actualbalance$/i);const bal=act!=null?act:(deepFind(a,/^balance$/i)!=null?deepFind(a,/^balance$/i):deepFind(a,/balance/i));
+ return{name:it.name||it.Name||it.title||'',code:it.code||'',ctrl:typeof c==='string'?c:(c&&c.name)||'',actual:bal,avail:deepFind(a,/available/i)}})}
+function props(o,out,d){d=d||0;if(!o||typeof o!=='object'||d>9)return;if(o.properties&&typeof o.properties==='object'){for(const k of Object.keys(o.properties)){out.add(k);props(o.properties[k],out,d+1)}}for(const k of Object.keys(o))if(k!=='properties')props(o[k],out,d+1)}
+let busy=false;
+async function tryLive(){if(busy)return;busy=true;try{await tryLive2()}finally{busy=false}}
+async function tryLive2(){
  if(!inManager()){$('status').textContent='Open this page from the Manager button to read live data';log('Page is not inside Manager.');return}
  $('status').textContent='Connecting to Manager…';log('Requesting page context…');try{parent.postMessage({type:'page-request'},'*')}catch(e){}
- await sleep(600);if(MGR.page)log('Page context: '+short(MGR.page,220));
- let biz=null;
- try{const d=await askRaw('/api4/businesses');log('GET /api4/businesses -> status '+d.status+': '+short(d.error||d.body,220));
-  const arr=toArr(d.body).length?toArr(d.body):(d.body&&d.body.businesses)||[];
-  if(arr.length){biz=arr.find(b=>/personal\s*finance/i.test(b.name||b.Name||''))||arr[0];log('Using business: '+(biz.name||biz.Name||short(biz,60)))}}catch(e){log('GET /api4/businesses -> '+e.message)}
- const bn=biz&&(biz.name||biz.Name),bk=biz&&(biz.key||biz.Key||biz.id||biz.uuid);
- const names=['bank-or-cash-account-batch','bank-account-batch','bank-or-cash-account','bank-and-cash-accounts','bank-or-cash-accounts','bank-account','bank-accounts','cash-account-batch'];
- const qs=[''];if(bn)qs.push('?business='+encodeURIComponent(bn));if(bk)qs.push('?business='+encodeURIComponent(bk));
- let rows=null;
- outer:for(const n of names)for(const q of qs){const p='/api4/'+n+q;
-  try{const d=await askRaw(p,3000);const arr=toArr(d.body);
-   log('GET '+n+(q?' +business':'')+' -> '+d.status+(arr.length?' list of '+arr.length:' '+short(d.error||d.body,110)));
-   if(arr.length){log('item keys: '+Object.keys(arr[0]).join(','));rows=fromApi(arr);if(rows.some(r=>r.actual!=null))break outer}}
-  catch(e){log('GET '+n+' -> '+e.message)}}
- if(rows&&rows.some(r=>r.actual!=null)){rows.forEach(r=>{if(r.actual==null)r.actual=0});applyAccounts(rows);$('status').textContent='Live: '+rows.length+' accounts read from Manager ('+new Date().toTimeString().slice(0,5)+')';return}
- if(rows)log('Accounts found but no balance fields. Use Quick import for balances.');
- $('status').textContent='Live balances not available. Use the quick import under Update figures';log('No usable balances from Manager. Use Quick import.')}
+ await sleep(600);if(MGR.page)log('Page context: '+short(MGR.page,200));
+ let L=null;const bq=MGR.page&&MGR.page.query&&MGR.page.query.business;
+ for(const q of ['',bq?'?business='+encodeURIComponent(bq):null]){if(q===null)continue;
+  try{const d=await askRaw('/api4/bank-or-cash-account-batch'+q);const arr=toArr(d.body);log('GET bank-or-cash-account-batch'+(q?' (business)':'')+' -> '+d.status+(arr.length?', '+arr.length+' accounts':': '+short(d.error||d.body,120)));if(arr.length){L={arr,body:d.body};break}}catch(e){log('GET bank-or-cash-account-batch -> '+e.message)}}
+ if(!L){$('status').textContent='Live read failed. Use the quick import under Update figures';log('Could not list accounts.');return}
+ const rows=fromApi(L.arr);log('First account: '+short(L.arr[0],650));
+ if(rows.some(r=>r.actual!=null)){rows.forEach(r=>{if(r.actual==null)r.actual=0});applyAccounts(rows);$('status').textContent='Live: '+rows.length+' accounts with balances ('+new Date().toTimeString().slice(0,5)+')';return}
+ /* names only: add to the dashboard without touching amounts, then explore where balances live */
+ rows.forEach(r=>{if(!r.name)return;const card=/credit card/i.test(r.name)||/credit card/i.test(r.ctrl||'');const lst=card?D.cards:D.cash;if(!lst.some(x=>x.name===r.name))lst.push(card?{name:r.name,amount:0,limit:0,due:''}:{name:r.name,amount:0})});buildEditor();render();
+ try{const self=href(L.arr[0]._links&&L.arr[0]._links.self);if(self){const d=await askRaw(self);log('GET '+self.slice(0,90)+' -> '+d.status+': '+short(d.error||d.body,500))}}catch(e){log('account detail -> '+e.message)}
+ try{const ds=href(L.body._links&&L.body._links.describedBy);if(ds){const d=await askRaw(ds);const out=new Set();props(d.body,out);log('Schema '+ds+' -> '+d.status+'; fields: '+Array.from(out).slice(0,80).join(', '))}}catch(e){log('schema -> '+e.message)}
+ log('Actions: '+short(Object.keys(L.arr[0]._actions||{}),120)+' | list links: '+short(Object.keys(L.body._links||{}),120));
+ $('status').textContent='Live: '+rows.length+' account names read. Balances need quick import';log('Account names read live. Balances are not in this endpoint. Use Quick import for balances.')}
 $('connect').onclick=tryLive;
 /* quick import from Manager screens (Copy to clipboard) */
 $('importBank').onclick=()=>{const t=parseTable($('pasteBank').value);const m=$('bankMsg');
