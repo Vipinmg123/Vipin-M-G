@@ -28,20 +28,43 @@ button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:7p
 button.s{background:#e9eefb;color:#173b91}button.x{background:transparent;color:var(--bad);padding:4px 8px}
 .tools{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center}
 .note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:10px}
+.donutwrap{display:flex;gap:16px;align-items:center;flex-wrap:wrap}.donutwrap canvas{width:210px;height:210px;flex:none}
+.legend{flex:1;min-width:180px;font-size:13px}.legend>div{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--line)}.legend .ln{flex:1}.sw{width:10px;height:10px;border-radius:3px;display:inline-block;flex:none}
+.sub{font-size:12px;color:var(--muted);margin:-6px 0 8px}
 @media(max-width:850px){.row{grid-template-columns:1fr}}
 </style></head><body>
-<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · build v19 · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
+<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · build v20 · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
 <main>
 <section class="kpis" id="kpis"></section>
 
 <section class="row">
 <div class="card"><h2>Cash positions</h2><div id="cash"></div></div>
-<div class="card"><h2>Cash flow</h2><canvas id="cfChart"></canvas><div id="cf"></div></div>
+<div class="card"><h2>Cash flow statement</h2><div id="cfs"></div></div>
+</section>
+
+<section class="row">
+<div class="card"><h2>Cash flow bridge</h2><div class="sub">Opening cash to closing cash</div><canvas id="wfChart"></canvas></div>
+<div class="card"><h2>Cash in vs out by month</h2><canvas id="cfChart"></canvas><div id="cf"></div></div>
 </section>
 
 <section class="row">
 <div class="card"><h2>Profit &amp; loss position</h2><div id="pl"></div></div>
 <div class="card"><h2>Balance sheet position</h2><div id="bs"></div></div>
+</section>
+
+<section class="row">
+<div class="card"><h2>Profit &amp; loss summary</h2><canvas id="plChart"></canvas></div>
+<div class="card"><h2>Expense mix</h2><div class="donutwrap"><canvas id="exDonut"></canvas><div id="exLeg" class="legend"></div></div></div>
+</section>
+
+<section class="row">
+<div class="card"><h2>Asset mix</h2><div class="donutwrap"><canvas id="asDonut"></canvas><div id="asLeg" class="legend"></div></div></div>
+<div class="card"><h2>Assets, liabilities &amp; net assets</h2><canvas id="bsChart"></canvas></div>
+</section>
+
+<section class="row">
+<div class="card"><h2>Variance: actual vs budget</h2><div class="sub">Green = favourable (income above budget, costs below budget)</div><canvas id="varChart"></canvas><div id="varTbl"></div></div>
+<div class="card"><h2>Variance: net cash flow vs previous month</h2><div class="sub">Change in monthly net cash flow</div><canvas id="momChart"></canvas></div>
 </section>
 
 <section class="row">
@@ -78,10 +101,11 @@ const SEC={
  loans:{t:'Loans',f:[['name','Loan','text'],['amount','Outstanding ₹','number']]},
  assets:{t:'Other assets (investments, FD, fixed assets)',f:[['name','Asset','text'],['amount','Value ₹','number']]},
  liabs:{t:'Other liabilities (GST, payables)',f:[['name','Liability','text'],['amount','Amount ₹','number']]},
- pl:{t:'Profit & loss lines',f:[['group','Section','group'],['name','Account','text'],['amount','Amount ₹','number']]},
- cf:{t:'Cash flow by month',f:[['month','Month (YYYY-MM)','text'],['in','Money in ₹','number'],['out','Money out ₹','number']]}
+ pl:{t:'Profit & loss lines (budget is optional, used for variance)',f:[['group','Section','group'],['name','Account','text'],['amount','Amount ₹','number'],['budget','Budget ₹','number']]},
+ cf:{t:'Cash flow by month',f:[['month','Month (YYYY-MM)','text'],['in','Money in ₹','number'],['out','Money out ₹','number']]},
+ cfa:{t:'Cash flow by account (one period)',f:[['name','Account','text'],['open','Opening ₹','number'],['in','Receipts ₹','number'],['out','Payments ₹','number'],['close','Closing ₹','number']]}
 };
-const EMPTY=()=>({period:'',cash:[],recv:[],cards:[],loans:[],assets:[],liabs:[],pl:[],cf:[]});
+const EMPTY=()=>({period:'',cash:[],recv:[],cards:[],loans:[],assets:[],liabs:[],pl:[],cf:[],cfa:[],cfPeriod:''});
 let D=EMPTY();
 try{const s=JSON.parse(localStorage.getItem(KEY)||'null');if(s)D=Object.assign(EMPTY(),s)}catch(e){}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(D))}catch(e){}}
@@ -95,7 +119,9 @@ function compute(){
  const cash=sum('cash'),recv=sum('recv'),cards=sum('cards'),loans=sum('loans'),oa=sum('assets'),ol=sum('liabs');
  const assets=cash+recv+oa,liab=cards+loans+ol;
  const cfIn=sum('cf','in'),cfOut=sum('cf','out');
- return{g,gross,op,net,cash,recv,cards,loans,oa,ol,assets,liab,netAssets:assets-liab,cfIn,cfOut,cfNet:cfIn-cfOut};
+ const aO=sum('cfa','open'),aI=sum('cfa','in'),aU=sum('cfa','out'),aC=sum('cfa','close');
+ const cfa={aO,aI,aU,aC,aX:aC-aO-aI+aU,aNet:aC-aO,hasA:(D.cfa||[]).length>0};
+ return{g,gross,op,net,cash,recv,cards,loans,oa,ol,assets,liab,netAssets:assets-liab,cfIn,cfOut,cfNet:cfIn-cfOut,...cfa};
 }
 function fit(c){const r=c.getBoundingClientRect(),d=window.devicePixelRatio||1;c.width=Math.max(300,Math.round((r.width||600)*d));c.height=Math.round((r.height||230)*d);return{x:c.getContext('2d'),w:c.width,h:c.height,d}}
 function drawBars(c,labels,sets){
@@ -107,14 +133,111 @@ function drawBars(c,labels,sets){
  const gp=pw/labels.length,bw=Math.min(30*d,gp/(sets.length+1));x.textAlign='center';
  labels.forEach((lab,i)=>{sets.forEach((s,j)=>{const bh=Math.max(0,s.v[i]||0)/max*(ph-4*d),bx=left+i*gp+gp/2+(j-(sets.length-1)/2)*(bw+3*d)-bw/2;x.fillStyle=s.c;x.fillRect(bx,bottom-bh,bw,bh)});x.fillStyle='#667085';x.fillText(lab.slice(2),left+i*gp+gp/2,bottom+16*d)});
 }
+
+/* ---- charts ---- */
+const PAL=['#2457d6','#e29a32','#17a673','#8a5cf5','#d6455d','#1fa3c4','#9aa4b2'];
+const GOOD='#17a673',BAD='#d6455d';
+const short$=v=>{const a=Math.abs(v),s=a>=10000000?(a/10000000).toFixed(1)+'Cr':a>=100000?(a/100000).toFixed(1)+'L':a>=1000?(a/1000).toFixed(a>=10000?0:1)+'k':String(Math.round(a));return(v<0?'-':'')+s};
+const MON=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const monLbl=m=>{const p=String(m).split('-');return MON[(+p[1])-1]?MON[(+p[1])-1]+' '+(p[0]||'').slice(2):String(m)};
+function msg(x,d,t){x.fillStyle='#667085';x.font=13*d+'px Arial';x.textAlign='left';x.fillText(t,16*d,36*d)}
+function fitText(x,t,mw){t=String(t);if(x.measureText(t).width<=mw)return t;while(t.length>1&&x.measureText(t+'…').width>mw)t=t.slice(0,-1);return t+'…'}
+function drawCols(c,labels,sets,emptyMsg){
+ c.style.height='';const{x,w,h,d}=fit(c);x.clearRect(0,0,w,h);
+ const all=sets.flatMap(s=>s.v.map(v=>+v||0));
+ if(!labels.length||!all.some(v=>v)){msg(x,d,emptyMsg||'No figures yet');return}
+ const named=sets.some(s=>s.name),top=(named?30:20)*d,left=50*d,bottom=h-28*d,ph=bottom-top,pw=w-left-10*d;
+ const mx=Math.max(0,...all),mn=Math.min(0,...all),span=(mx-mn)||1,Y=v=>top+(mx-v)/span*ph,z=Y(0);
+ x.font=11*d+'px Arial';x.lineWidth=1*d;
+ for(let i=0;i<=4;i++){const val=mx-span*i/4,y=top+ph*i/4;x.strokeStyle='#e5e9f0';x.beginPath();x.moveTo(left,y);x.lineTo(w-8*d,y);x.stroke();x.fillStyle='#667085';x.textAlign='right';x.fillText(short$(val),left-6*d,y+4*d)}
+ x.strokeStyle='#98a2b3';x.beginPath();x.moveTo(left,z);x.lineTo(w-8*d,z);x.stroke();
+ const gp=pw/labels.length,bw=Math.min(36*d,gp/(sets.length+0.8));
+ labels.forEach((lab,i)=>{const cx=left+i*gp+gp/2;
+  sets.forEach((s,j)=>{const v=+s.v[i]||0,bx=cx+(j-(sets.length-1)/2)*(bw+3*d)-bw/2,y=Y(v);x.fillStyle=(s.cols&&s.cols[i])||s.c;x.fillRect(bx,Math.min(y,z),bw,Math.max(1*d,Math.abs(y-z)));
+   if(sets.length===1&&v){x.fillStyle='#344054';x.textAlign='center';x.fillText(short$(v),bx+bw/2,v>=0?y-4*d:y+13*d)}});
+  x.fillStyle='#667085';x.textAlign='center';x.fillText(fitText(x,lab,gp-4*d),cx,bottom+17*d)});
+ if(named){let lx=left;sets.forEach(s=>{x.fillStyle=s.c;x.fillRect(lx,8*d,10*d,10*d);x.fillStyle='#344054';x.textAlign='left';x.fillText(s.name,lx+14*d,17*d);lx+=x.measureText(s.name).width+34*d})}
+}
+function drawDiverge(c,labels,vals,emptyMsg){
+ c.style.height=Math.max(230,labels.length*30+36)+'px';
+ const{x,w,h,d}=fit(c);x.clearRect(0,0,w,h);
+ if(!labels.length){msg(x,d,emptyMsg||'No figures yet');return}
+ x.font=11*d+'px Arial';
+ const lw=Math.min(w*0.34,Math.max(...labels.map(l=>x.measureText(l).width))+10*d),left=lw+36*d,right=w-46*d;
+ const mx=Math.max(0,...vals),mn=Math.min(0,...vals),span=(mx-mn)||1,X=v=>left+(v-mn)/span*(right-left),z=X(0),rh=(h-16*d)/labels.length,bh=Math.min(18*d,rh*0.65);
+ x.strokeStyle='#98a2b3';x.lineWidth=1*d;x.beginPath();x.moveTo(z,4*d);x.lineTo(z,h-4*d);x.stroke();
+ labels.forEach((l,i)=>{const cy=8*d+i*rh+rh/2,v=vals[i];
+  x.fillStyle=v>=0?GOOD:BAD;x.fillRect(Math.min(X(v),z),cy-bh/2,Math.max(1*d,Math.abs(X(v)-z)),bh);
+  x.fillStyle='#344054';x.textAlign='right';x.fillText(fitText(x,l,lw),lw,cy+4*d);
+  x.textAlign=v>=0?'left':'right';x.fillText(short$(v),v>=0?X(v)+4*d:X(v)-4*d,cy+4*d)});
+}
+function drawWaterfall(c,steps){
+ c.style.height='';const{x,w,h,d}=fit(c);x.clearRect(0,0,w,h);
+ if(!steps.length){msg(x,d,'No cash flow figures yet');return}
+ let run=0;const bars=steps.map(s=>{if(s.t==='total'){run=s.v;return{n:s.n,a:0,b:s.v,v:s.v,c:'#2457d6'}}const a=run;run+=s.v;return{n:s.n,a,b:run,v:s.v,c:s.v>=0?GOOD:BAD}});
+ const ys=bars.flatMap(b=>[b.a,b.b]),mx=Math.max(0,...ys),mn=Math.min(0,...ys),span=(mx-mn)||1;
+ const top=22*d,left=50*d,bottom=h-28*d,ph=bottom-top,pw=w-left-10*d,Y=v=>top+(mx-v)/span*ph,z=Y(0);
+ x.font=11*d+'px Arial';x.lineWidth=1*d;
+ for(let i=0;i<=4;i++){const val=mx-span*i/4,y=top+ph*i/4;x.strokeStyle='#e5e9f0';x.beginPath();x.moveTo(left,y);x.lineTo(w-8*d,y);x.stroke();x.fillStyle='#667085';x.textAlign='right';x.fillText(short$(val),left-6*d,y+4*d)}
+ x.strokeStyle='#98a2b3';x.beginPath();x.moveTo(left,z);x.lineTo(w-8*d,z);x.stroke();
+ const gp=pw/bars.length,bw=Math.min(54*d,gp*0.62);
+ bars.forEach((b,i)=>{const cx=left+i*gp+gp/2,y1=Y(Math.max(b.a,b.b)),y2=Y(Math.min(b.a,b.b));
+  x.fillStyle=b.c;x.fillRect(cx-bw/2,y1,bw,Math.max(1*d,y2-y1));
+  if(i<bars.length-1){x.strokeStyle='#98a2b3';x.setLineDash([3*d,3*d]);x.beginPath();x.moveTo(cx+bw/2,Y(b.b));x.lineTo(cx+gp-bw/2,Y(b.b));x.stroke();x.setLineDash([])}
+  x.fillStyle='#344054';x.textAlign='center';x.fillText((b.v>0&&steps[i].t!=='total'?'+':'')+short$(b.v),cx,y1-4*d);
+  x.fillStyle='#667085';x.fillText(b.n,cx,bottom+17*d)});
+}
+function topN(items,n){items=items.filter(i=>i.v>0.005).sort((a,b)=>b.v-a.v);if(items.length<=n)return items;const rest=items.slice(n-1).reduce((t,i)=>t+i.v,0);return items.slice(0,n-1).concat([{n:'Other',v:rest}])}
+function drawDonut(c,leg,items,label){
+ const{x,w,h,d}=fit(c);x.clearRect(0,0,w,h);items=topN(items,7);const tot=items.reduce((t,i)=>t+i.v,0);
+ if(!tot){msg(x,d,'No figures yet');leg.innerHTML='';return}
+ const cx=w/2,cy=h/2,R=Math.min(w,h)/2-4*d,r=R*0.62;let a=-Math.PI/2;
+ items.forEach((it,i)=>{const sw=it.v/tot*Math.PI*2;x.beginPath();x.arc(cx,cy,(R+r)/2,a,a+sw);x.lineWidth=R-r;x.strokeStyle=PAL[i%PAL.length];x.stroke();a+=sw});
+ x.fillStyle='#667085';x.font=11*d+'px Arial';x.textAlign='center';x.fillText(label,cx,cy-6*d);
+ x.fillStyle='#172033';x.font='bold '+16*d+'px Arial';x.fillText(short$(tot),cx,cy+14*d);
+ leg.innerHTML=items.map((it,i)=>`<div><i class="sw" style="background:${PAL[i%PAL.length]}"></i><span class="ln">${esc(it.n)}</span><b>${fmt(it.v)}</b><span class="muted">${Math.round(it.v/tot*100)}%</span></div>`).join('');
+}
+function renderCharts(m,cf){
+ const A=D.cfa||[];
+ /* cash flow statement */
+ if(A.length){
+  const row=(l,v,c,b)=>`<tr class="${b||''}"><td>${l}</td><td class="n ${c||''}">${fmt(v)}</td></tr>`;
+  const differs=D.cash.length&&Math.abs(m.aC-m.cash)>1;
+  $('cfs').innerHTML=(D.cfPeriod?`<div class="chips"><span class="chip">${esc(D.cfPeriod)}</span><span class="chip ${cls(m.aNet)}">Net change ${fmt(m.aNet)}</span></div>`:'')
+   +'<table><tbody>'+row('Opening cash',m.aO)+row('+ Receipts',m.aI,'pos')+row('− Payments',-m.aU,'neg')+(Math.abs(m.aX)>=0.5?row('± Other / unclassified',m.aX,cls(m.aX)):'')+row('Closing cash',m.aC,'','big')+'</tbody></table>'
+   +'<table style="margin-top:12px"><thead><tr><th>Account</th><th class="n">Opening</th><th class="n">In</th><th class="n">Out</th><th class="n">Closing</th></tr></thead><tbody>'
+   +A.map(r=>`<tr><td>${esc(r.name)}</td><td class="n">${fmt(r.open)}</td><td class="n pos">${fmt(r.in)}</td><td class="n neg">${fmt(r.out)}</td><td class="n">${fmt(r.close)}</td></tr>`).join('')+'</tbody></table>'
+   +(differs?`<div class="note">Closing cash ${fmt(m.aC)} differs from Cash positions ${fmt(m.cash)}. The report period may end before the balances date.</div>`:'');
+ }else $('cfs').innerHTML='<div class="empty">No cash flow figures yet. “Refresh live data from Manager” reads your Bank Account Summary reports, or add rows under Update figures.</div>';
+ /* cash flow bridge */
+ const steps=A.length?[{n:'Opening',v:m.aO,t:'total'},{n:'Receipts',v:m.aI},{n:'Payments',v:-m.aU}].concat(Math.abs(m.aX)>=0.5?[{n:'Other',v:m.aX}]:[],[{n:'Closing',v:m.aC,t:'total'}]):(cf.length?[{n:'Receipts',v:m.cfIn},{n:'Payments',v:-m.cfOut},{n:'Net',v:m.cfNet,t:'total'}]:[]);
+ drawWaterfall($('wfChart'),steps);
+ /* P&L summary bars */
+ const g=m.g,opx=g.expense+g.opex,pls=[['Income',g.income,PAL[0]],['Cost of sales',g.cos,PAL[1]],['Gross profit',m.gross,m.gross>=0?GOOD:BAD],['Expenses',opx,PAL[1]],['Other income',g.otherinc,PAL[0]],['Finance costs',g.finance,PAL[1]],['Net profit',m.net,m.net>=0?GOOD:BAD]].filter(r=>r[1]||r[0]==='Net profit');
+ drawCols($('plChart'),pls.map(r=>r[0]),[{v:pls.map(r=>r[1]),c:PAL[0],cols:pls.map(r=>r[2])}],D.pl.length?'No figures yet':'No profit & loss figures yet');
+ /* donuts */
+ drawDonut($('exDonut'),$('exLeg'),D.pl.filter(r=>['cos','expense','opex','finance'].includes(r.group)).map(r=>({n:r.name,v:+r.amount||0})),'Expenses');
+ drawDonut($('asDonut'),$('asLeg'),[{n:'Cash & bank',v:m.cash},{n:'Receivables',v:m.recv}].concat(D.assets.map(r=>({n:r.name,v:+r.amount||0}))),'Assets');
+ /* assets vs liabilities */
+ const bl=[['Cash & bank',m.cash,PAL[0]],['Receivables',m.recv,PAL[0]],['Other assets',m.oa,PAL[0]],['Credit cards',m.cards,BAD],['Loans',m.loans,BAD],['Other liabs',m.ol,BAD],['Net assets',m.netAssets,m.netAssets>=0?GOOD:BAD]].filter(r=>r[1]||r[0]==='Net assets');
+ drawCols($('bsChart'),bl.map(r=>r[0]),[{v:bl.map(r=>r[1]),c:PAL[0],cols:bl.map(r=>r[2])}],'No balance sheet figures yet');
+ /* variance: actual vs budget (positive = favourable) */
+ const vr=D.pl.filter(r=>+r.budget>0).map(r=>{const inc=r.group==='income'||r.group==='otherinc',a=+r.amount||0,b=+r.budget;return{n:r.name,a,b,v:inc?a-b:b-a}}).sort((p,q)=>Math.abs(q.v)-Math.abs(p.v)).slice(0,10);
+ drawDiverge($('varChart'),vr.map(r=>r.n),vr.map(r=>r.v),'Add budgets to see variance');
+ $('varTbl').innerHTML=vr.length?`<div class="chips" style="margin-top:10px"><span class="chip ${cls(vr.reduce((t,r)=>t+r.v,0))}">Net variance ${fmt(vr.reduce((t,r)=>t+r.v,0))}</span></div><table><thead><tr><th>Account</th><th class="n">Budget</th><th class="n">Actual</th><th class="n">Variance</th></tr></thead><tbody>`+vr.map(r=>`<tr><td>${esc(r.n)}</td><td class="n">${fmt(r.b)}</td><td class="n">${fmt(r.a)}</td><td class="n ${cls(r.v)}">${fmt(r.v)}</td></tr>`).join('')+'</tbody></table>':'<div class="note">Open “Update figures”, then in <b>Profit &amp; loss lines</b> enter a Budget ₹ for each account. Budgets are kept when you refresh from Manager.</div>';
+ /* variance: month-on-month net cash flow */
+ const nets=cf.map(r=>(+r.in||0)-(+r.out||0)),mom=[],ml=[];
+ for(let i=1;i<cf.length;i++){mom.push(nets[i]-nets[i-1]);ml.push(monLbl(cf[i].month)+' vs '+monLbl(cf[i-1].month))}
+ drawDiverge($('momChart'),ml,mom,'Needs at least two months');
+}
 function render(){
  const m=compute();
  $('periodLbl').textContent=D.period||'set period under Update figures';
- $('kpis').innerHTML=[['Cash & bank',m.cash,''],['Receivables',m.recv,''],['Credit card outstanding',m.cards,m.cards>0?'neg':''],['Net profit (loss)',m.net,cls(m.net)],['Net cash flow',m.cfNet,cls(m.cfNet)],['Net assets',m.netAssets,cls(m.netAssets)]]
+ $('kpis').innerHTML=[['Cash & bank',m.cash,''],['Receivables',m.recv,''],['Credit card outstanding',m.cards,m.cards>0?'neg':''],['Net profit (loss)',m.net,cls(m.net)],['Net cash flow',m.hasA?m.aNet:m.cfNet,cls(m.hasA?m.aNet:m.cfNet)],['Net assets',m.netAssets,cls(m.netAssets)]]
   .map(([k,v,c])=>`<div class="card"><div class="k">${k}</div><div class="v ${c}">${fmt(v)}</div></div>`).join('');
  $('cash').innerHTML=D.cash.length?listTable(D.cash,[r=>esc(r.name),r=>fmt(r.amount)])+`<table><tbody><tr class="tot"><td>Total cash &amp; bank</td><td class="n">${fmt(m.cash)}</td></tr></tbody></table>`:noData;
  const cf=D.cf.filter(r=>r.month).slice().sort((a,b)=>a.month<b.month?-1:1).slice(-8);
- drawBars($('cfChart'),cf.map(r=>r.month),[{v:cf.map(r=>+r.in||0),c:'#2457d6'},{v:cf.map(r=>+r.out||0),c:'#e29a32'}]);
+ drawCols($('cfChart'),cf.map(r=>monLbl(r.month)),[{name:'Money in',v:cf.map(r=>+r.in||0),c:'#2457d6'},{name:'Money out',v:cf.map(r=>+r.out||0),c:'#e29a32'}],'No cash flow figures yet');
  $('cf').innerHTML=cf.length?'<table><thead><tr><th>Month</th><th class="n">In</th><th class="n">Out</th><th class="n">Net</th></tr></thead><tbody>'+cf.map(r=>{const n=(+r.in||0)-(+r.out||0);return`<tr><td>${esc(r.month)}</td><td class="n">${fmt(r.in)}</td><td class="n">${fmt(r.out)}</td><td class="n ${cls(n)}">${fmt(n)}</td></tr>`}).join('')+`<tr class="tot"><td>Total</td><td class="n">${fmt(m.cfIn)}</td><td class="n">${fmt(m.cfOut)}</td><td class="n ${cls(m.cfNet)}">${fmt(m.cfNet)}</td></tr></tbody></table>`:'';
  const sec=(k,l)=>{const rs=D.pl.filter(r=>r.group===k);return rs.length?`<tr class="grp"><td colspan="2">${l}</td></tr>`+rs.map(r=>`<tr><td>&nbsp;&nbsp;${esc(r.name)}</td><td class="n">${fmt(r.amount)}</td></tr>`).join('')+`<tr class="tot"><td>Total — ${l}</td><td class="n">${fmt(m.g[k])}</td></tr>`:''};
  $('pl').innerHTML=D.pl.length?'<table><tbody>'+sec('income','Income')+sec('cos','Cost of sales')+`<tr class="tot"><td>Gross profit (loss)</td><td class="n">${fmt(m.gross)}</td></tr>`+sec('expense','Expenses')+sec('opex','Operating expenses')+`<tr class="tot"><td>Operating profit (loss)</td><td class="n">${fmt(m.op)}</td></tr>`+sec('otherinc','Other income')+sec('finance','Finance costs')+`<tr class="big"><td>Net profit (loss)</td><td class="n ${cls(m.net)}">${fmt(m.net)}</td></tr></tbody></table>`:noData;
@@ -125,6 +248,7 @@ function render(){
  const today=new Date().toISOString().slice(0,10),od=D.recv.filter(r=>r.due&&r.due<today),odT=od.reduce((t,r)=>t+(+r.amount||0),0);
  $('recv').innerHTML=D.recv.length?`<div class="chips"><span class="chip">Total ${fmt(m.recv)}</span><span class="chip ${odT?'neg':''}">Overdue ${fmt(odT)}</span></div><table><thead><tr><th>Customer</th><th>Due</th><th class="n">Amount</th></tr></thead><tbody>`+D.recv.map(r=>`<tr><td>${esc(r.name)}</td><td class="${r.due&&r.due<today?'neg':''}">${esc(r.due||'')}${r.due&&r.due<today?' · overdue':''}</td><td class="n">${fmt(r.amount)}</td></tr>`).join('')+'</tbody></table>':noData;
  $('cards').innerHTML=D.cards.length?`<div class="chips"><span class="chip">Outstanding ${fmt(m.cards)}</span><span class="chip">Limit ${fmt(sum('cards','limit'))}</span></div><table><thead><tr><th>Card</th><th>Due</th><th>Used</th><th class="n">Outstanding</th></tr></thead><tbody>`+D.cards.map(r=>{const u=+r.limit>0?Math.min(100,Math.round((+r.amount||0)/+r.limit*100)):null;return`<tr><td>${esc(r.name)}</td><td>${esc(r.due||'')}</td><td>${u===null?'':`<div class="bar"><i class="${u>=70?'hi':''}" style="width:${u}%"></i></div><span class="muted">${u}%</span>`}</td><td class="n">${fmt(r.amount)}</td></tr>`}).join('')+'</tbody></table>':noData;
+ renderCharts(m,cf);
  save();
 }
 /* ---- editor ---- */
@@ -136,13 +260,14 @@ $('editor').addEventListener('click',e=>{const t=e.target;
  if(t.dataset.add){const k=t.dataset.add,r={};SEC[k].f.forEach(([f,,ty])=>r[f]=ty==='number'?0:ty==='group'?'expense':'');D[k].push(r);buildEditor();render()}
  if(t.dataset.del){D[t.dataset.del].splice(+t.dataset.i,1);buildEditor();render()}});
 $('period').value=D.period;$('period').oninput=e=>{D.period=e.target.value;render()};
-$('example').onclick=()=>{D={period:'Example: Nov 2026',
+$('example').onclick=()=>{D=Object.assign(EMPTY(),{period:'Example: Nov 2026',
  cash:[{name:'HDFC Savings',amount:182500},{name:'Other Bank Savings',amount:46200},{name:'Cash in Hand',amount:5000}],
  recv:[{name:'Client A',amount:25000,due:'2026-11-05'},{name:'Client B',amount:12000,due:'2026-12-10'}],
  cards:[{name:'HDFC Credit Card',amount:34500,limit:150000,due:'2026-12-05'},{name:'SBI Credit Card',amount:92000,limit:120000,due:'2026-12-12'}],
  loans:[{name:'Cholamandalam loan',amount:210000}],assets:[{name:'Investments',amount:350000},{name:'Fixed assets',amount:120000}],liabs:[{name:'GST',amount:6200}],
- pl:[{group:'income',name:'Sales',amount:65000},{group:'otherinc',name:'Interest income',amount:850},{group:'expense',name:'Groceries',amount:4500},{group:'opex',name:'Utilities',amount:1800},{group:'finance',name:'Interest expense',amount:2400}],
- cf:[{month:'2026-08',in:60000,out:48000},{month:'2026-09',in:62000,out:51000},{month:'2026-10',in:65000,out:70000},{month:'2026-11',in:65850,out:25399}]};
+ pl:[{group:'income',name:'Sales',amount:65000,budget:70000},{group:'otherinc',name:'Interest income',amount:850,budget:600},{group:'expense',name:'Groceries',amount:4500,budget:4000},{group:'expense',name:'Rent',amount:12000,budget:12000},{group:'expense',name:'Transport',amount:3200,budget:3500},{group:'opex',name:'Utilities',amount:1800,budget:2000},{group:'finance',name:'Interest expense',amount:2400,budget:2400}],
+ cfPeriod:'2026-11-01 to 2026-11-30',cfa:[{name:'HDFC Savings',open:150000,in:65850,out:33350,close:182500},{name:'Other Bank Savings',open:50000,in:0,out:3800,close:46200},{name:'Cash in Hand',open:6000,in:0,out:1000,close:5000}],
+ cf:[{month:'2026-08',in:60000,out:48000},{month:'2026-09',in:62000,out:51000},{month:'2026-10',in:65000,out:70000},{month:'2026-11',in:65850,out:38150}]});
  $('period').value=D.period;buildEditor();render()};
 let armed=false;$('clear').onclick=()=>{if(!armed){armed=true;$('clear').textContent='Click again to confirm';setTimeout(()=>{armed=false;$('clear').textContent='Clear all figures'},3000);return}armed=false;$('clear').textContent='Clear all figures';D=EMPTY();$('period').value='';buildEditor();render()};
 /* ---- Manager link: live read + quick import ---- */
@@ -171,7 +296,37 @@ function applyAccounts(list){ // list: [{name,ctrl,actual,avail}]
    const limit=a.avail!=null&&a.avail!==''?Math.round((out+Number(a.avail))*100)/100:(a.lim||prev.limit||0);
    cards.push({name:a.name,amount:Math.round(out*100)/100,limit,due:prev.due||''})}
   else cash.push({name:a.name,amount:a.actual})});
- if(!cash.length&&!cards.length)return false;D.cash=cash;D.cards=cards;buildEditor();render();return true}
+ if(!cash.length&&!cards.length)return false;D.cash=cash;D.cards=cards;
+ const r2=x=>Math.round(x*100)/100,cfd=list.filter(a=>a.cfd&&!(a.card||/credit card/i.test(a.ctrl||'')||/credit card/i.test(a.name)));
+ if(cfd.length){D.cfa=cfd.map(a=>({name:a.name,open:r2(a.cfd.open),in:r2(a.cfd.in),out:r2(a.cfd.out),close:r2(a.cfd.close)}));
+  const per=list.per;D.cfPeriod=per&&per.from&&per.to?per.from+' to '+per.to:'';
+  if(per&&per.from&&per.to&&(new Date(per.to)-new Date(per.from))/864e5<=35){const mo=per.to.slice(0,7),row={month:mo,in:D.cfa.reduce((t,r)=>t+r.in,0),out:D.cfa.reduce((t,r)=>t+r.out,0)},ix=D.cf.findIndex(r=>r.month===mo);if(ix>=0)D.cf[ix]=row;else D.cf.push(row)}}
+ buildEditor();render();return true}
+const kidsOf=n=>[].concat(Array.isArray(n.rows)?n.rows:(n.rows&&Array.isArray(n.rows.items)?n.rows.items:[]),Array.isArray(n.items)?n.items:[]);
+/* opening, receipts, payments and closing from one Bank Account Summary view */
+function cfFromRows(rw){
+ const o={open:null,close:null};let inS=0,outS=0,inT=null,outT=null,gotIn=false,gotOut=false;
+ const val=nd=>{const c=nd.cells[0];return c&&typeof c.value==='number'?c.value:(c&&c.text?money(c.text):0)};
+ const clean=v=>String(v||'').replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim();
+ const IN=/receipt|money in|inflow|received/i,OUT=/payment|money out|outflow|paid/i;
+ const leafSum=nd=>{let s=0,t=null;const f=a=>a.forEach(k=>{if(!k||typeof k!=='object')return;const nm=clean(k.name||k.displayName),has=Array.isArray(k.cells)&&k.cells.length,kk=kidsOf(k);
+   if(has&&/^total/i.test(nm))t=Math.abs(val(k));else if(has&&!kk.length)s+=Math.abs(val(k));if(kk.length)f(kk)});f(kidsOf(nd));return t!=null?t:s};
+ const go=arr=>arr.forEach(nd=>{if(!nd||typeof nd!=='object')return;
+  const nm=clean(nd.name||nd.displayName),has=Array.isArray(nd.cells)&&nd.cells.length;let m=false;
+  if(nm&&has){
+   if(/beginning|opening/i.test(nm)){if(o.open==null)o.open=val(nd);m=true}
+   else if(/end of the period|closing/i.test(nm)){if(o.close==null)o.close=val(nd);m=true}
+   else if(IN.test(nm)){gotIn=true;if(/^total/i.test(nm))inT=Math.abs(val(nd));else inS+=Math.abs(val(nd));m=true}
+   else if(OUT.test(nm)){gotOut=true;if(/^total/i.test(nm))outT=Math.abs(val(nd));else outS+=Math.abs(val(nd));m=true}}
+  else if(nm&&!has&&kidsOf(nd).length){
+   if(IN.test(nm)){gotIn=true;inS+=leafSum(nd);m=true}
+   else if(OUT.test(nm)){gotOut=true;outS+=leafSum(nd);m=true}}
+  if(!m)go(kidsOf(nd))});
+ go(Array.isArray(rw)?rw:[]);
+ const inn=inT!=null?inT:inS,out=outT!=null?outT:outS;
+ if(o.open==null&&o.close==null)return null;
+ const close=o.close!=null?o.close:o.open+inn-out,open=o.open!=null?o.open:close-inn+out;
+ return{open,close,inn,out,gotIn,gotOut}}
 function toArr(b){if(Array.isArray(b))return b;if(b&&typeof b==='object'){for(const k of ['items','data','accounts','rows','results'])if(Array.isArray(b[k]))return b[k]}return[]}
 const num=(o,keys)=>{for(const k of keys)if(o[k]!=null&&o[k]!==''&&isFinite(Number(o[k])))return Number(o[k]);return null};
 const href=l=>l&&(l.href||(l[0]&&l[0].href))||'';
@@ -265,11 +420,13 @@ async function bankSummary(rows,items,P,qs){
   if(first)log('  saved report fields: '+short(nz(it),500));
   try{const y=await askRaw(P+'-view'+(qs?qs+'&':'?')+'key='+K,6000),b=y.body||{};
    const rw=Array.isArray(b.rows)?b.rows:(b.rows&&Array.isArray(b.rows.items)?b.rows.items:[]);
-   if(first){first=false;log('  summary saved fields: '+Object.keys(it).join(',')+' | view fields: '+Object.keys(b).join(','))}
+   if(first){first=false;log('  summary saved fields: '+Object.keys(it).join(',')+' | view fields: '+Object.keys(b).join(','));log('  summary rows: '+nameList(rw))}
    if(!a){const bs=JSON.stringify([b.title,b.subtitles,b.description,it.title,it.description,it.name]);a=rows.filter(r=>r.name&&!r.__d&&(bs.includes(r.name)||(r.code&&bs.includes(r.code)))).sort((p,q)=>q.name.length-p.name.length)[0]}
    let end=null;walkNodes(rw,nd=>{const nm=nd.name||nd.displayName;if(typeof nm==='string'&&/cash at the end of the period/i.test(nm)&&Array.isArray(nd.cells)&&nd.cells.length){const c=nd.cells[0];end=c&&typeof c.value==='number'?c.value:(c&&c.text?money(c.text):0)}});
    log('  summary '+K.slice(0,8)+' -> '+(a?a.name:'NO ACCOUNT FOUND')+' end balance '+end);
-   if(a&&end!=null&&!a.__d){a.actual=end;a.__d=1;n++;const pr=(it.periods||[])[0];if(pr&&pr.toDate)rows.asAt='as at '+String(pr.toDate).slice(0,10)}
+   if(a&&end!=null&&!a.__d){a.actual=end;a.__d=1;n++;const pr=(it.periods||[])[0];if(pr&&pr.toDate)rows.asAt='as at '+String(pr.toDate).slice(0,10);
+    if(pr&&pr.toDate&&!rows.per)rows.per={from:String(pr.fromDate||'').slice(0,10),to:String(pr.toDate).slice(0,10)};
+    const cf=cfFromRows(rw);if(cf){a.cfd={open:cf.open,in:cf.inn,out:cf.out,close:end};log('  cash flow '+a.name+': open '+cf.open+', receipts '+cf.inn+(cf.gotIn?'':' (not found)')+', payments '+cf.out+(cf.gotOut?'':' (not found)')+', close '+end)}}
   }catch(e){log('  summary '+K.slice(0,8)+' -> '+e.message)}}
  return n}
 async function loadBalances(rows){
@@ -325,6 +482,7 @@ async function loadStatements(){
   walk(kids(n))});
  walk(rw);
  if(!pl.length&&!assets.length&&!liabs.length){log('Statements: nothing recognised in Trial Balance. Names: '+nameList(rw));return false}
+ const oldB={};D.pl.forEach(r=>{if(+r.budget)oldB[r.group+'|'+r.name]=+r.budget});pl.forEach(r=>{const b=oldB[r.group+'|'+r.name];if(b)r.budget=b});
  D.pl=pl;D.assets=assets;D.loans=loans;D.liabs=liabs;
  if(!D.recv.length&&tbAR)D.recv=[{name:'Accounts receivable (trial balance total)',amount:r2(tbAR),due:''}];
  const p=per(items[0]);if(p.toDate)D.period=String(p.fromDate||'').slice(0,10)+' to '+String(p.toDate).slice(0,10)+' (Manager trial balance)';
@@ -369,7 +527,7 @@ $('importCust').onclick=()=>{const t=parseTable($('pasteCust').value);const m=$(
  if(ni<0||ai<0){m.textContent='Missing Name or Balance column.';return}
  const list=t.data.map(r=>({name:r[ni]||'',amount:money(r[ai])})).filter(a=>a.name&&a.amount);
  const prev=D.recv;D.recv=list.map(a=>({name:a.name,amount:a.amount,due:(prev.find(p=>p.name===a.name)||{}).due||''}));buildEditor();render();m.textContent='Imported '+D.recv.length+' customers with balances.'};
-if(inManager()){log('Inside Manager (build v19). Starting live read…');setTimeout(tryLive,600)}else{log('Opened outside Manager. Live read only works from the Manager button.')}
+if(inManager()){log('Inside Manager (build v20). Starting live read…');setTimeout(tryLive,600)}else{log('Opened outside Manager. Live read only works from the Manager button.')}
 buildEditor();render();
 addEventListener('resize',()=>render());
 </script></body></html>
