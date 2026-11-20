@@ -2,90 +2,206 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Personal Finance ERP</title>
 <style>
-:root{--bg:#f4f6fa;--card:#fff;--ink:#172033;--muted:#667085;--line:#e5e9f0;--accent:#2457d6}
+:root{--bg:#f4f6fa;--card:#fff;--ink:#172033;--muted:#667085;--line:#e5e9f0;--accent:#2457d6;--good:#17663b;--bad:#b42318}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px system-ui,Segoe UI,Arial}
-header{background:#15233c;color:white;padding:22px 26px}header h1{margin:0 0 5px;font-size:22px}header p{margin:0;color:#cbd5e1}
-main{padding:22px;max-width:1400px;margin:auto}.grid{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:14px}
+header{background:#15233c;color:#fff;padding:22px 26px}header h1{margin:0 0 5px;font-size:22px}header p{margin:0;color:#cbd5e1}
+main{padding:22px;max-width:1400px;margin:auto}
+.grid{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:14px;margin-bottom:14px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:0 2px 8px #15233c08}
-.metric{font-size:24px;font-weight:700;margin-top:8px}.muted{color:var(--muted)}.row{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-top:14px}
-h2{font-size:16px;margin:0 0 12px}.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+.metric{font-size:22px;font-weight:700;margin-top:8px}.muted{color:var(--muted)}
+.row{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-top:14px}.row2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+h2{font-size:16px;margin:0 0 12px}.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
 button,label.file{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:9px 13px;cursor:pointer;font-weight:600}
-button.secondary{background:#e9eefb;color:#173b91}input[type=file]{display:none}select,input{padding:8px;border:1px solid var(--line);border-radius:7px;background:white}
-table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:9px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:600}
+button.secondary{background:#e9eefb;color:#173b91}input[type=file]{display:none}
+select,input[type=month]{padding:8px;border:1px solid var(--line);border-radius:7px;background:#fff}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:600}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+tr.grp td{background:#f0f3f9;font-weight:700}tr.tot td{font-weight:700;border-top:2px solid var(--line)}tr.big td{font-weight:800;background:#e9eefb}
+.pos{color:var(--good)}.neg{color:var(--bad)}
 canvas{width:100%;height:230px}.note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:12px}
 .status{padding:8px 10px;background:#edf7f0;color:#17663b;border-radius:8px;display:inline-block}
-@media(max-width:850px){.grid{grid-template-columns:repeat(2,1fr)}.row{grid-template-columns:1fr}}@media(max-width:480px){.grid{grid-template-columns:1fr}}
+.warn{background:#fff6e5;color:#8a5a00}
+details summary{cursor:pointer;font-weight:600}
+@media(max-width:850px){.grid{grid-template-columns:repeat(2,1fr)}.row,.row2{grid-template-columns:1fr}}@media(max-width:480px){.grid{grid-template-columns:1fr}}
 </style></head><body>
-<header><h1>Personal Finance ERP</h1><p>Manager.io Desktop companion dashboard · INR ₹</p></header>
+<header><h1>Personal Finance ERP</h1><p>Manager.io companion dashboard · mapped to your chart of accounts · INR ₹</p></header>
 <main>
 <div class="toolbar">
 <label class="file">Import transactions CSV<input id="csvFile" type="file" accept=".csv,text/csv"></label>
 <button class="secondary" id="sample">Load sample data</button>
-<button class="secondary" id="export">Export dashboard data</button>
-<button id="refresh">Refresh Manager bank accounts</button>
-<span id="status" class="status">CSV dashboard ready</span>
+<button class="secondary" id="template">Download CSV template</button>
+<button class="secondary" id="export">Export data</button>
+<label>Month: <select id="period"></select></label>
+<button class="secondary" id="refresh" title="Experimental, only works if Manager exposes the extension API">Refresh Manager bank accounts (experimental)</button>
+<span id="status" class="status">Ready: import a CSV to begin</span>
 </div>
+
 <section class="grid">
-<div class="card"><div class="muted">Income (imported period)</div><div id="income" class="metric">₹0</div></div>
-<div class="card"><div class="muted">Expenses (imported period)</div><div id="expense" class="metric">₹0</div></div>
-<div class="card"><div class="muted">Net cash movement</div><div id="net" class="metric">₹0</div></div>
-<div class="card"><div class="muted">Transactions imported</div><div id="count" class="metric">0</div></div>
+<div class="card"><div class="muted">Total income</div><div id="mIncome" class="metric">₹0</div></div>
+<div class="card"><div class="muted">Gross profit</div><div id="mGross" class="metric">₹0</div></div>
+<div class="card"><div class="muted">Total expenses (incl. operating &amp; finance)</div><div id="mExp" class="metric">₹0</div></div>
+<div class="card"><div class="muted">Net profit (loss)</div><div id="mNet" class="metric">₹0</div></div>
 </section>
+<section class="grid">
+<div class="card"><div class="muted">Loan &amp; credit card repayments</div><div id="mDebt" class="metric">₹0</div></div>
+<div class="card"><div class="muted">Invested (Investments, net)</div><div id="mInv" class="metric">₹0</div></div>
+<div class="card"><div class="muted">Net cash movement</div><div id="mCash" class="metric">₹0</div></div>
+<div class="card"><div class="muted">Transactions / unmapped</div><div id="mCount" class="metric">0</div></div>
+</section>
+
 <section class="row">
 <div class="card"><h2>Monthly income vs expenses</h2><canvas id="monthly" width="900" height="260"></canvas></div>
-<div class="card"><h2>Expense by category</h2><canvas id="category" width="600" height="260"></canvas></div>
+<div class="card"><h2>Top expense accounts</h2><canvas id="category" width="600" height="260"></canvas></div>
 </section>
+
+<section class="row2">
+<div class="card"><h2>Profit &amp; loss (selected month)</h2><div id="pl"></div></div>
+<div class="card"><h2>Balance sheet movement (selected month)</h2><div id="bs"></div>
+<p class="note">Movement only: it shows how each asset/liability/equity account changed in the period from your CSV. It is not a closing balance. Use Manager's Balance Sheet for real balances.</p></div>
+</section>
+
 <section class="row">
-<div class="card"><h2>Manager.io bank / cash accounts</h2><div id="accounts" class="muted">Click Refresh Manager bank accounts from inside Manager.</div><p class="note">This uses Manager's documented extension API to read bank/cash account records. It does not import bank statements or initiate payments.</p></div>
-<div class="card"><h2>Upcoming / planning checklist</h2><table><tbody>
-<tr><td>Salary date</td><td>Maintain in Cash Plan template</td></tr>
-<tr><td>Credit card due date</td><td>Maintain in Credit Cards template</td></tr>
-<tr><td>FD maturity</td><td>Maintain in Investments template</td></tr>
-<tr><td>SIP / loan instalments</td><td>Maintain in Cash Plan template</td></tr>
-</tbody></table><p class="note">Approval workflow and automatic bank matching are not enabled by this starter dashboard. Use the controlled process in README before automating write actions.</p></div>
+<div class="card"><h2>Manager.io bank / cash accounts</h2><div id="accounts" class="muted">Experimental. Needs a Manager version that exposes an extension API to the page. Otherwise rely on CSV import.</div></div>
+<div class="card"><h2>Unmapped accounts</h2><div id="unmapped" class="muted">None</div>
+<p class="note">Account names in your CSV must match your Manager chart of accounts (case-insensitive). Unmapped rows are classified by the <b>type</b> column only.</p></div>
 </section>
-<section class="card" style="margin-top:14px"><h2>Imported transaction preview</h2><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Description</th><th>Category</th><th>Type</th><th>Amount</th><th>Account</th></tr></thead><tbody id="transactions"><tr><td colspan="6" class="muted">Import the Transactions_Template.csv file to begin.</td></tr></tbody></table></div></section>
-<p class="note">Privacy: CSV data is processed in this browser frame and stored only in this browser's local storage if available. Do not use this dashboard on a shared/public Windows profile. Back up your Manager business separately.</p>
+
+<section class="card" style="margin-top:14px"><h2>Latest transactions</h2><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Description</th><th>Ledger account</th><th>Section</th><th>Dir</th><th class="n">Amount</th><th>Bank / cash</th></tr></thead><tbody id="transactions"><tr><td colspan="7" class="muted">Import a CSV to begin.</td></tr></tbody></table></div></section>
+
+<section class="card" style="margin-top:14px"><details><summary>Chart of accounts used for mapping</summary><div id="coaRef" class="note"></div></details></section>
+
+<p class="note">CSV columns: <b>date, description, account, direction, amount, bank</b>. <b>account</b> = a ledger account from your chart (e.g. Groceries, Utilities, Investments, HDFC Credit Card EMI). <b>direction</b> = <b>in</b> (money into the bank/cash) or <b>out</b> (money leaving). Dates: YYYY-MM-DD or DD-MM-YYYY. Older files with <b>category</b> and <b>type</b> columns still import.<br>Privacy: data is processed in this browser and kept in its local storage. Do not use on a shared profile.</p>
 </main>
 <script>
-const fmt=n=>'₹'+Number(n||0).toLocaleString('en-IN',{maximumFractionDigits:2});
-let rows=[];
-const $=id=>document.getElementById(id);
-function setStatus(s){$('status').textContent=s}
-function parseCSV(text){
- const lines=text.replace(/\r/g,'').split('\n').filter(x=>x.trim()); if(!lines.length)return [];
- const parseLine=line=>{let a=[],v='',q=false;for(let i=0;i<line.length;i++){let c=line[i];if(c=='"'&&line[i+1]=='"'&&q){v+='"';i++}else if(c=='"')q=!q;else if(c==','&&!q){a.push(v);v=''}else v+=c}a.push(v);return a};
- const h=parseLine(lines.shift()).map(x=>x.trim().toLowerCase());
- return lines.map(l=>{let a=parseLine(l),o={};h.forEach((k,i)=>o[k]=(a[i]||'').trim());return o})
- .map(o=>({date:o.date||o.transaction_date||'',description:o.description||'',category:o.category||'Uncategorised',type:(o.type||'expense').toLowerCase(),amount:Math.abs(Number((o.amount||'0').replace(/,/g,''))),account:o.account||''}))
- .filter(x=>x.date&&Number.isFinite(x.amount));
+/* ===== Chart of accounts (from Manager.io) ===== */
+const COA={
+ cos:{label:'Less: Cost of sales',kind:'exp',accts:['Freight & courier','Direct labour']},
+ income:{label:'Income',kind:'inc',accts:['Billable expenses - invoiced','Discount Received','Foreign exchange gains (losses)','General Income','Interest received','Inventory - sales','Investment gains (losses)','Miscellaneous Incoming Payments','Sales','Other income','Other revenue']},
+ expense:{label:'Less: Expenses',kind:'exp',accts:['Bank charges','Billable expenses - cost','Computer equipment','Credit Card Charges','Discount Allowed','Entertainment','Fixed assets - depreciation','Food & Beverages Expenses','Funding A/c HU','Groceries','Insurance and Premiums','Interest Paid','Inventory - cost','Inventory Write-offs','Lease','Legal fees','Lottery Tickets','Medical Expenses','Miscellaneous Outgoing Payments','Motor vehicle expenses','Other Expenses','Parking Expenses','Petrol, Oil and Lubes','Printing and stationery','Rent','Repairs and maintenance','Rounding expense','Salary','Subscriptions and Memberships','Telephone','Travel Expenses','Write Off','Beverages Expenses']},
+ opex:{label:'Less: Operating expenses',kind:'exp',accts:['Advertising & marketing','Travel & accommodation','Relevant Expense','Utilities','Tour & Travel Expenses','Office supplies','Telephone & internet','TV Recharge Expense','Accounting & legal fees']},
+ otherinc:{label:'Other income',kind:'inc',accts:['Interest income']},
+ finance:{label:'Less: Finance costs',kind:'exp',accts:['Interest expense']},
+ asset:{label:'Assets',kind:'asset',accts:['Accounts receivable','Billable expenses','Cash & cash equivalents','Cash In Transit','Fixed assets, accumulated depreciation','Fixed assets, at cost','Inventory on hand','Investments','Other Receivables','Withholding tax receivable','Negative inventory clearing']},
+ liability:{label:'Liabilities',kind:'liab',accts:['Accounts payable','Credit Cards','Employee clearing account','GST','Cess','GST Ledger','Ineligible ITC','RCM Payable','Interdivisional loan','Other Payables','Withholding tax payable']},
+ loans:{label:'Loan and Liabilities',kind:'liab',accts:['Cholamandalam Investment and Finance Company Limited','HDFC Credit Card EMI','Kisetsu Saison Finance India Private Limited','SBI Credit Card EMI']},
+ equity:{label:'Equity',kind:'eq',accts:['Capital Accounts','Inter Account Transfers','Retained earnings']}
+};
+const MAP={};Object.entries(COA).forEach(([g,v])=>v.accts.forEach(a=>{MAP[a.toLowerCase()]=g}));
+/* common aliases so older CSVs still classify */
+const ALIAS={'salary income':'income','food':'Food & Beverages Expenses','groceries':'Groceries','utilities':'Utilities','credit card':'Credit Cards','fd interest':'Interest income','interest':'Interest income','fixed deposit':'Investments','mutual fund':'Investments','shares':'Investments','sip':'Investments','other income':'Other income'};
+function classify(acct){
+ const k=acct.trim().toLowerCase();
+ if(MAP[k])return{group:MAP[k],name:Object.values(COA).flatMap(v=>v.accts).find(a=>a.toLowerCase()===k)};
+ const al=ALIAS[k];
+ if(al){if(MAP[al.toLowerCase()])return{group:MAP[al.toLowerCase()],name:al};if(COA[al])return{group:al,name:acct}}
+ return{group:null,name:acct};
 }
+/* ===== helpers ===== */
+const fmt=n=>(n<0?'-':'')+'₹'+Math.abs(Number(n||0)).toLocaleString('en-IN',{maximumFractionDigits:2});
+const $=id=>document.getElementById(id);let rows=[];
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function setStatus(s,w){const e=$('status');e.textContent=s;e.className='status'+(w?' warn':'')}
+function isoDate(s){s=(s||'').trim();let m=s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);if(m)return m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0');
+ m=s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/);if(m)return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');return''}
+function parseCSV(text){
+ const lines=text.replace(/\r/g,'').replace(/^\uFEFF/,'').split('\n').filter(x=>x.trim());if(!lines.length)return[];
+ const pl=line=>{let a=[],v='',q=false;for(let i=0;i<line.length;i++){let c=line[i];if(c=='"'&&line[i+1]=='"'&&q){v+='"';i++}else if(c=='"')q=!q;else if(c==','&&!q){a.push(v);v=''}else v+=c}a.push(v);return a};
+ const h=pl(lines.shift()).map(x=>x.trim().toLowerCase());
+ return lines.map(l=>{const a=pl(l),o={};h.forEach((k,i)=>o[k]=(a[i]||'').trim());
+  const legacy=('category' in o)&&!('bank' in o);   // old format: category = ledger, account = bank
+  const acct=legacy?(o.category||''):(o.account||o.category||'');
+  const bank=legacy?(o.account||''):(o.bank||'');
+  const type=(o.type||'').toLowerCase();
+  const c=classify(acct);
+  let dir=(o.direction||'').toLowerCase();
+  if(dir!=='in'&&dir!=='out'){
+   if(['income','receipt','salary'].includes(type))dir='in';
+   else if(['expense','payment'].includes(type))dir='out';
+   else{const k=c.group&&COA[c.group].kind;dir=(k==='inc'||k==='liab'&&type==='borrow')?'in':'out'}
+  }
+  return{date:isoDate(o.date||o.transaction_date),description:o.description||'',account:c.name||acct||'Uncategorised',group:c.group,dir,
+   amount:Math.abs(Number((o.amount||'0').replace(/,/g,''))),bank:bank};
+ }).filter(x=>x.date&&Number.isFinite(x.amount));
+}
+/* ===== charts ===== */
 function drawBars(canvas,labels,sets){
  const c=canvas.getContext('2d'),w=canvas.width,h=canvas.height;c.clearRect(0,0,w,h);const max=Math.max(1,...sets.flatMap(s=>s.values));
- const left=48,bottom=h-35,top=15,plotH=bottom-top,plotW=w-left-15;
- c.strokeStyle='#e5e9f0';c.fillStyle='#667085';c.font='12px Arial';
+ const left=48,bottom=h-35,top=15,plotH=bottom-top,plotW=w-left-15;c.strokeStyle='#e5e9f0';c.fillStyle='#667085';c.font='12px Arial';
  for(let i=0;i<5;i++){let y=top+plotH*i/4;c.beginPath();c.moveTo(left,y);c.lineTo(w-10,y);c.stroke()}
  const group=plotW/Math.max(1,labels.length),bw=Math.min(28,group/(sets.length+1));
- labels.forEach((lab,i)=>{sets.forEach((s,j)=>{let v=s.values[i]||0,bh=v/max*(plotH-8),x=left+i*group+group/2+(j-(sets.length-1)/2)*(bw+4)-bw/2;c.fillStyle=s.color;c.fillRect(x,bottom-bh,bw,bh)});c.fillStyle='#667085';c.textAlign='center';c.fillText(lab,left+i*group+group/2,bottom+19)});
+ labels.forEach((lab,i)=>{sets.forEach((s,j)=>{let v=Math.max(0,s.values[i]||0),bh=v/max*(plotH-8),x=left+i*group+group/2+(j-(sets.length-1)/2)*(bw+4)-bw/2;c.fillStyle=s.color;c.fillRect(x,bottom-bh,bw,bh)});c.fillStyle='#667085';c.textAlign='center';c.fillText(lab,left+i*group+group/2,bottom+19)});
 }
-function drawDonut(canvas,items){const c=canvas.getContext('2d'),w=canvas.width,h=canvas.height;c.clearRect(0,0,w,h);let total=items.reduce((a,x)=>a+x[1],0)||1,start=-Math.PI/2;const colors=['#2457d6','#13a078','#e29a32','#a05bd4','#dc5b68','#568caa','#8993a4'];items.slice(0,7).forEach((x,i)=>{let end=start+x[1]/total*Math.PI*2;c.beginPath();c.moveTo(175,125);c.arc(175,125,88,start,end);c.closePath();c.fillStyle=colors[i];c.fill();start=end});c.font='12px Arial';c.fillStyle='#172033';items.slice(0,7).forEach((x,i)=>{c.fillStyle=colors[i];c.fillRect(300,25+i*29,12,12);c.fillStyle='#172033';c.fillText(x[0]+' '+fmt(x[1]),320,36+i*29)})}
+function drawDonut(canvas,items){const c=canvas.getContext('2d'),w=canvas.width,h=canvas.height;c.clearRect(0,0,w,h);
+ items=items.filter(x=>x[1]>0);let total=items.reduce((a,x)=>a+x[1],0)||1,start=-Math.PI/2;const colors=['#2457d6','#13a078','#e29a32','#a05bd4','#dc5b68','#568caa','#8993a4'];
+ items.slice(0,7).forEach((x,i)=>{let end=start+x[1]/total*Math.PI*2;c.beginPath();c.moveTo(130,125);c.arc(130,125,88,start,end);c.closePath();c.fillStyle=colors[i];c.fill();start=end});
+ c.font='12px Arial';c.textAlign='left';items.slice(0,7).forEach((x,i)=>{c.fillStyle=colors[i];c.fillRect(245,25+i*29,12,12);c.fillStyle='#172033';c.fillText(x[0].slice(0,22)+' '+fmt(x[1]),263,36+i*29)})}
+/* ===== calculations ===== */
+function signed(r){const k=r.group&&COA[r.group].kind;const a=r.amount;
+ if(k==='inc')return r.dir==='in'?a:-a;            // income up when money comes in
+ if(k==='exp')return r.dir==='out'?a:-a;           // expense up when money goes out
+ if(k==='asset')return r.dir==='out'?a:-a;         // asset up when money goes out (purchase)
+ if(k==='liab')return r.dir==='in'?a:-a;           // liability up when borrowing (money in)
+ if(k==='eq')return r.dir==='in'?a:-a;
+ return r.dir==='in'?a:-a;}
+function sumGroup(rs,g){const m={};rs.filter(r=>r.group===g).forEach(r=>m[r.account]=(m[r.account]||0)+signed(r));return m}
+const tot=m=>Object.values(m).reduce((a,b)=>a+b,0);
+function lines(m){return Object.entries(m).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).map(([k,v])=>`<tr><td>&nbsp;&nbsp;${esc(k)}</td><td class="n">${fmt(v)}</td></tr>`).join('')}
+function section(label,m,cls){return`<tr class="grp"><td colspan="2">${esc(label)}</td></tr>${lines(m)}<tr class="tot"><td>Total — ${esc(label)}</td><td class="n">${fmt(tot(m))}</td></tr>`}
+function colour(el,v){el.className='metric '+(v>0?'pos':v<0?'neg':'')}
 function render(){
- const inc=rows.filter(x=>['income','receipt','salary'].includes(x.type)).reduce((a,x)=>a+x.amount,0);
- const exp=rows.filter(x=>['expense','payment'].includes(x.type)).reduce((a,x)=>a+x.amount,0);
- $('income').textContent=fmt(inc);$('expense').textContent=fmt(exp);$('net').textContent=fmt(inc-exp);$('count').textContent=rows.length;
- const months=[...new Set(rows.map(x=>x.date.slice(0,7)))].sort().slice(-8);
- const sum=(m,t)=>rows.filter(x=>x.date.slice(0,7)===m&&t.includes(x.type)).reduce((a,x)=>a+x.amount,0);
- drawBars($('monthly'),months.map(x=>x.slice(2)),[{values:months.map(m=>sum(m,['income','receipt','salary'])),color:'#2457d6'},{values:months.map(m=>sum(m,['expense','payment'])),color:'#e29a32'}]);
- const cats={};rows.filter(x=>['expense','payment'].includes(x.type)).forEach(x=>cats[x.category]=(cats[x.category]||0)+x.amount);
+ const months=[...new Set(rows.map(x=>x.date.slice(0,7)))].sort();
+ const sel=$('period'),cur=sel.value||'ALL';
+ sel.innerHTML='<option value="ALL">All imported</option>'+months.slice().reverse().map(m=>`<option value="${m}">${m}</option>`).join('');
+ sel.value=[...sel.options].some(o=>o.value===cur)?cur:'ALL';
+ const rs=sel.value==='ALL'?rows:rows.filter(x=>x.date.slice(0,7)===sel.value);
+ const g={};Object.keys(COA).forEach(k=>g[k]=sumGroup(rs,k));
+ const income=tot(g.income),cos=tot(g.cos),gross=income-cos;
+ const exp=tot(g.expense),opex=tot(g.opex),oinc=tot(g.otherinc),fin=tot(g.finance);
+ const opProfit=gross-exp-opex,net=opProfit+oinc-fin;
+ $('mIncome').textContent=fmt(income+oinc);$('mGross').textContent=fmt(gross);$('mExp').textContent=fmt(cos+exp+opex+fin);$('mNet').textContent=fmt(net);colour($('mNet'),net);
+ $('mDebt').textContent=fmt(-tot(g.loans)-Math.min(0,(g.liability['Credit Cards']||0)));
+ $('mInv').textContent=fmt(g.asset['Investments']||0);
+ const cash=rs.filter(r=>r.bank||true).reduce((a,r)=>a+(r.dir==='in'?r.amount:-r.amount),0);
+ $('mCash').textContent=fmt(cash);colour($('mCash'),cash);
+ const un=rs.filter(r=>!r.group);$('mCount').textContent=rs.length+' / '+un.length;
+ /* P&L */
+ $('pl').innerHTML=rs.length?`<table><tbody>${section(COA.income.label,g.income)}${section(COA.cos.label,g.cos)}
+ <tr class="tot"><td>Gross profit (loss)</td><td class="n">${fmt(gross)}</td></tr>${section(COA.expense.label,g.expense)}${section(COA.opex.label,g.opex)}
+ <tr class="tot"><td>Operating profit (loss)</td><td class="n">${fmt(opProfit)}</td></tr>${section(COA.otherinc.label,g.otherinc)}${section(COA.finance.label,g.finance)}
+ <tr class="big"><td>Net profit (loss)</td><td class="n">${fmt(net)}</td></tr></tbody></table>`:'<span class="muted">No data</span>';
+ /* BS movement */
+ const aT=tot(g.asset),lT=tot(g.liability)+tot(g.loans),eT=tot(g.equity);
+ $('bs').innerHTML=rs.length?`<table><tbody>${section(COA.asset.label,g.asset)}${section(COA.liability.label,g.liability)}${section(COA.loans.label,g.loans)}${section(COA.equity.label,g.equity)}
+ <tr class="big"><td>Net asset movement (assets − liabilities)</td><td class="n">${fmt(aT-lT)}</td></tr></tbody></table>`:'<span class="muted">No data</span>';
+ /* charts */
+ const isInc=r=>r.group&&COA[r.group].kind==='inc',isExp=r=>r.group&&COA[r.group].kind==='exp';
+ const ms=months.slice(-8),sm=(m,f)=>rows.filter(r=>r.date.slice(0,7)===m&&f(r)).reduce((a,r)=>a+signed(r),0);
+ drawBars($('monthly'),ms.map(x=>x.slice(2)),[{values:ms.map(m=>sm(m,isInc)),color:'#2457d6'},{values:ms.map(m=>sm(m,isExp)),color:'#e29a32'}]);
+ const cats={};rs.filter(isExp).forEach(r=>cats[r.account]=(cats[r.account]||0)+signed(r));
  drawDonut($('category'),Object.entries(cats).sort((a,b)=>b[1]-a[1]));
- $('transactions').innerHTML=rows.slice(-30).reverse().map(x=>`<tr><td>${esc(x.date)}</td><td>${esc(x.description)}</td><td>${esc(x.category)}</td><td>${esc(x.type)}</td><td>${fmt(x.amount)}</td><td>${esc(x.account)}</td></tr>`).join('')||'<tr><td colspan="6">No transactions</td></tr>';
- try{localStorage.setItem('pferp_rows',JSON.stringify(rows))}catch(e){}
+ $('unmapped').innerHTML=un.length?'<ul>'+[...new Set(un.map(x=>x.account))].map(a=>'<li>'+esc(a)+'</li>').join('')+'</ul>':'None, all rows mapped to your chart.';
+ $('transactions').innerHTML=rs.slice(-30).reverse().map(x=>`<tr><td>${esc(x.date)}</td><td>${esc(x.description)}</td><td>${esc(x.account)}</td><td>${esc(x.group?COA[x.group].label:'Unmapped')}</td><td>${esc(x.dir)}</td><td class="n">${fmt(x.amount)}</td><td>${esc(x.bank)}</td></tr>`).join('')||'<tr><td colspan="7">No transactions</td></tr>';
+ try{localStorage.setItem('pferp_rows_v2',JSON.stringify(rows))}catch(e){}
 }
-function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-$('csvFile').addEventListener('change',async e=>{let f=e.target.files[0];if(!f)return;rows=parseCSV(await f.text());render();setStatus(rows.length+' rows imported from '+f.name)});
-$('sample').onclick=()=>{rows=parseCSV('date,description,category,type,amount,account\n2026-11-01,Salary,Salary,income,65000,HDFC Savings\n2026-11-03,Groceries,Groceries,expense,4500,HDFC Savings\n2026-11-05,Electricity,Utilities,expense,1800,HDFC Savings\n2026-11-07,Credit card bill,Credit Card,payment,12000,HDFC Savings\n2026-11-10,FD interest,Interest,income,850,HDFC Savings');render();setStatus('Sample data loaded — replace with your own CSV')};
-$('export').onclick=()=>{let head='date,description,category,type,amount,account\n';let body=rows.map(x=>[x.date,x.description,x.category,x.type,x.amount,x.account].map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(',')).join('\n');let a=document.createElement('a');a.href=URL.createObjectURL(new Blob([head+body],{type:'text/csv'}));a.download='Personal_Finance_Transactions_Export.csv';a.click();URL.revokeObjectURL(a.href)};
-function pm(message,timeout=12000){return new Promise((resolve,reject)=>{let id=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random());let timer=setTimeout(()=>{window.removeEventListener('message',fn);reject(Error('Manager API timeout. Open this page as an Extension inside Manager.io.'))},timeout);function fn(e){if(e.data?.requestId===id&&e.data?.type==='api-request-response'){clearTimeout(timer);window.removeEventListener('message',fn);resolve(e.data.body)}}window.addEventListener('message',fn);window.parent.postMessage({...message,requestId:id},'*')})}
-$('refresh').onclick=async()=>{try{setStatus('Connecting to Manager…');let data=await pm({type:'api-request',method:'GET',path:'/api4/bank-or-cash-accounts'});let arr=Array.isArray(data)?data:(data?.items||[]);$('accounts').innerHTML=arr.length?'<table><thead><tr><th>Account</th><th>Record details</th></tr></thead><tbody>'+arr.map(a=>'<tr><td>'+esc(a.name||a.Name||'Unnamed account')+'</td><td class="muted">'+esc(a.currency||a.Currency||'')+'</td></tr>').join('')+'</tbody></table>':'API connected; no account rows returned. Check current Manager API response schema.';setStatus('Manager account list refreshed')}catch(e){setStatus(e.message);$('accounts').textContent=e.message}};
-try{rows=JSON.parse(localStorage.getItem('pferp_rows')||'[]')}catch(e){rows=[]}render();
+$('period').onchange=render;
+/* ===== reference table ===== */
+$('coaRef').innerHTML=Object.values(COA).map(v=>`<p><b>${esc(v.label)}</b>: ${v.accts.map(esc).join(' · ')}</p>`).join('');
+/* ===== events ===== */
+$('csvFile').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;rows=parseCSV(await f.text());render();const u=rows.filter(r=>!r.group).length;setStatus(rows.length+' rows imported from '+f.name+(u?' · '+u+' unmapped':''),!!u);e.target.value=''});
+const SAMPLE='date,description,account,direction,amount,bank\n2026-11-01,Monthly salary received,Sales,in,65000,HDFC Savings\n2026-11-02,Groceries,Groceries,out,4500,HDFC Savings\n2026-11-03,Electricity bill,Utilities,out,1800,HDFC Savings\n2026-11-05,Mobile recharge,Telephone & internet,out,599,HDFC Savings\n2026-11-07,Credit card EMI,HDFC Credit Card EMI,out,12000,HDFC Savings\n2026-11-10,FD interest,Interest income,in,850,HDFC Savings\n2026-11-12,Mutual fund SIP,Investments,out,5000,HDFC Savings\n2026-11-15,Petrol,"Petrol, Oil and Lubes",out,1500,HDFC Savings';
+$('sample').onclick=()=>{rows=parseCSV(SAMPLE);render();setStatus('Sample data loaded. Replace with your own CSV',true)};
+function download(name,text){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'text/csv'}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
+const q=v=>'"'+String(v).replace(/"/g,'""')+'"';
+$('template').onclick=()=>download('Transactions_Template.csv',SAMPLE);
+$('export').onclick=()=>download('Personal_Finance_Transactions_Export.csv','date,description,account,direction,amount,bank\n'+rows.map(x=>[x.date,x.description,x.account,x.dir,x.amount,x.bank].map(q).join(',')).join('\n'));
+/* Experimental Manager bridge (unverified against Manager 26.x; CSV is the supported path) */
+function pm(message,timeout=8000){return new Promise((resolve,reject)=>{const id=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random());
+ const t=setTimeout(()=>{removeEventListener('message',fn);reject(Error('No response from Manager. This API bridge is experimental or not supported by your version. Use CSV import.'))},timeout);
+ function fn(e){if(e.data?.requestId===id&&e.data?.type==='api-request-response'){clearTimeout(t);removeEventListener('message',fn);resolve(e.data.body)}}
+ addEventListener('message',fn);parent.postMessage({...message,requestId:id},'*')})}
+$('refresh').onclick=async()=>{try{setStatus('Connecting to Manager…');const data=await pm({type:'api-request',method:'GET',path:'/api4/bank-or-cash-accounts'});
+ const arr=Array.isArray(data)?data:(data?.items||[]);
+ $('accounts').innerHTML=arr.length?'<table><thead><tr><th>Account</th><th>Currency</th></tr></thead><tbody>'+arr.map(a=>'<tr><td>'+esc(a.name||a.Name||'Unnamed')+'</td><td class="muted">'+esc(a.currency||a.Currency||'')+'</td></tr>').join('')+'</tbody></table>':'Connected but no rows returned.';
+ setStatus('Manager account list refreshed')}catch(e){setStatus(e.message,true);$('accounts').textContent=e.message}};
+try{rows=JSON.parse(localStorage.getItem('pferp_rows_v2')||'[]')}catch(e){rows=[]}render();
 </script></body></html>
