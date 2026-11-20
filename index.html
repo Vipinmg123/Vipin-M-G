@@ -30,7 +30,7 @@ button.s{background:#e9eefb;color:#173b91}button.x{background:transparent;color:
 .note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:10px}
 @media(max-width:850px){.row{grid-template-columns:1fr}}
 </style></head><body>
-<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · build v12 · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
+<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · build v13 · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
 <main>
 <section class="kpis" id="kpis"></section>
 
@@ -240,6 +240,7 @@ async function probeDiag(){
   try{const x=await askRaw('/api4/'+p+'-batch'+qs,5000),it=toArr(x.body);log('PROBE '+p+'-batch -> '+x.status+', '+it.length+' items');if(it[0])log('  first: '+short(it[0],600))}
   catch(e){log('PROBE '+p+'-batch -> '+e.message)}}
 }
+function nameList(rw){const o=[];walkNodes(rw,nd=>{const nm=nd.name||nd.displayName;if(typeof nm!=='string')return;const vs=Array.isArray(nd.cells)?nd.cells.map(c=>c&&c.text!=null?c.text:(c&&c.value!=null?c.value:'')).join('/'):'(group)';o.push(nm+'='+vs)});return o.join(' | ').slice(0,2500)}
 async function loadBalances(rows){
  let d;try{d=await askRaw('/api4/reports',4000)}catch(e){log('GET /api4/reports -> '+e.message);return false}
  const lk=(d.body&&d.body._links)||{};
@@ -257,8 +258,8 @@ async function loadBalances(rows){
   while(q.length&&tried.size<10){const u=q.shift();if(tried.has(u))continue;tried.add(u);
    try{const y=await askRaw(u,5000),b=y.body||{},rw=Array.isArray(b.rows)?b.rows:(b.rows&&Array.isArray(b.rows.items)?b.rows.items:[]);
     log('  '+u.slice(0,80)+' -> '+y.status+' rows='+rw.length);if(!rw.length&&y.status===200)log('    empty body: '+short(b,260));
-    if(rw.length){log('  report: '+short([b.title,b.subtitles],120));const n=matchBalances(rows,rw,k);if(!n)log('  raw rows: '+short(rw,900));
-     if(n>=1){rows.asAt=(b.subtitles||[]).join(' · ');if(n<rows.length)log('  raw rows: '+short(rw,1500));log('  matched '+n+' of '+rows.length+' accounts from '+k+' ('+rows.asAt+'). Accounts not listed by Manager are treated as 0.');if(n<rows.length&&/^balanceSheet/.test(k))log('  NOTE: Balance Sheet shows group totals only. In Manager open Reports > Trial Balance, set the date to today, Save, then refresh here for per-account balances.');return true}
+    if(rw.length){log('  report: '+short([b.title,b.subtitles],120));const n=matchBalances(rows,rw,k);if(n<rows.length)log('  names: '+nameList(rw));
+     if(n>=1){rows.asAt=(b.subtitles||[]).join(' · ');if(n<rows.length)log('  names: '+nameList(rw));log('  matched '+n+' of '+rows.length+' accounts from '+k+' ('+rows.asAt+'). Accounts not listed by Manager are treated as 0.');if(n<rows.length&&/^balanceSheet/.test(k))log('  NOTE: Balance Sheet shows group totals only. In Manager open Reports > Trial Balance, set the date to today, Save, then refresh here for per-account balances.');return true}
      log('  only '+n+' accounts matched, trying next')}
     Object.values(b._links||{}).forEach(l=>{const x=href(l);if(x&&/view|result/i.test(x)&&!tried.has(x))q.push(x)})
    }catch(e){log('  '+u.slice(0,60)+' -> '+e.message)}}}
@@ -296,7 +297,7 @@ $('importCust').onclick=()=>{const t=parseTable($('pasteCust').value);const m=$(
  if(ni<0||ai<0){m.textContent='Missing Name or Balance column.';return}
  const list=t.data.map(r=>({name:r[ni]||'',amount:money(r[ai])})).filter(a=>a.name&&a.amount);
  const prev=D.recv;D.recv=list.map(a=>({name:a.name,amount:a.amount,due:(prev.find(p=>p.name===a.name)||{}).due||''}));buildEditor();render();m.textContent='Imported '+D.recv.length+' customers with balances.'};
-if(inManager()){log('Inside Manager. Starting live read…');setTimeout(tryLive,600)}else{log('Opened outside Manager. Live read only works from the Manager button.')}
+if(inManager()){log('Inside Manager (build v13). Starting live read…');setTimeout(tryLive,600)}else{log('Opened outside Manager. Live read only works from the Manager button.')}
 buildEditor();render();
 addEventListener('resize',()=>render());
 </script></body></html>
