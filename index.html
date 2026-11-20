@@ -30,7 +30,7 @@ button.s{background:#e9eefb;color:#173b91}button.x{background:transparent;color:
 .note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:10px}
 @media(max-width:850px){.row{grid-template-columns:1fr}}
 </style></head><body>
-<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · build v9 · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
+<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · build v10 · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
 <main>
 <section class="kpis" id="kpis"></section>
 
@@ -202,7 +202,7 @@ async function tryLive2(){
   $('status').textContent='Live: '+got+' of '+rows.length+' accounts have balances · '+(rows.asAt||'')+' · read '+new Date().toTimeString().slice(0,5);
   log('Live read OK: '+got+' of '+rows.length+' balances loaded ('+(rows.asAt||'')+'). Verify against Manager.');return}
  log('Could not read balances from reports. Use Quick import under Update figures (Copy to clipboard on Bank and Cash Accounts).');
- await exploreReports();
+ await probeDiag();
  $('status').textContent='Live: '+rows.length+' accounts and card limits read. Balances: use quick import'}
 /* leaf values of a report row, in order */
 function leaves(o,out,d){out=out||[];d=d||0;if(o==null||d>40)return out;if(typeof o!=='object'){out.push(o);return out}for(const k of Object.keys(o)){if(k==='_links'||k==='_actions')continue;leaves(o[k],out,d+1)}return out}
@@ -233,6 +233,13 @@ function matchBalances(rows,rws,kind){let n=0;const used=new Set();
   if(sheet&&isCard(a))x=-Math.abs(x);
   a.actual=x;n++});
  return n}
+async function probeDiag(){
+ try{const r=await askRaw('/api4',4000);const lk=(r.body&&r.body._links)||{};log('API root links: '+Object.keys(lk).join(', ').slice(0,1800))}catch(e){log('GET /api4 -> '+e.message)}
+ const qs=window.__qs||'';
+ for(const p of ['receipt','payment','inter-account-transfer','opening-balance','journal-entry']){
+  try{const x=await askRaw('/api4/'+p+'-batch'+qs,5000),it=toArr(x.body);log('PROBE '+p+'-batch -> '+x.status+', '+it.length+' items');if(it[0])log('  first: '+short(it[0],600))}
+  catch(e){log('PROBE '+p+'-batch -> '+e.message)}}
+}
 async function loadBalances(rows){
  let d;try{d=await askRaw('/api4/reports',4000)}catch(e){log('GET /api4/reports -> '+e.message);return false}
  const lk=(d.body&&d.body._links)||{};
@@ -240,7 +247,7 @@ async function loadBalances(rows){
   const h=href(lk[k]);if(!h){log(k+': not offered by Manager');continue}
   const qs=h.includes('?')?'?'+h.split('?')[1]:'',P=h.split('?')[0].replace(/-batch$/,'');
   let items=[];try{const x=await askRaw(h,4000);items=toArr(x.body)}catch(e){log(k+': list failed - '+e.message);continue}
-  log(k+': '+items.length+' saved report(s)');
+  log(k+': '+items.length+' saved report(s)');window.__qs=qs;if(items[0])log('  saved item: '+short(items[0],380));
   const q=[];
   items.forEach(i=>{const it=i.item||i;const K=it.key||it.id;
    Object.values(i._links||{}).forEach(b=>{const u=href(b);if(u&&/view|result/i.test(u))q.push(u)});
@@ -249,7 +256,7 @@ async function loadBalances(rows){
   const tried=new Set();
   while(q.length&&tried.size<10){const u=q.shift();if(tried.has(u))continue;tried.add(u);
    try{const y=await askRaw(u,5000),b=y.body||{},rw=Array.isArray(b.rows)?b.rows:[];
-    log('  '+u.slice(0,80)+' -> '+y.status+' rows='+rw.length);
+    log('  '+u.slice(0,80)+' -> '+y.status+' rows='+rw.length);if(!rw.length&&y.status===200)log('    empty body: '+short(b,260));
     if(rw.length){log('  report: '+short([b.title,b.subtitles],120));const n=matchBalances(rows,rw,k);if(!n)log('  raw rows: '+short(rw,900));
      if(n>=1){rows.asAt=(b.subtitles||[]).join(' · ');if(n<rows.length)log('  raw rows: '+short(rw,1500));log('  matched '+n+' of '+rows.length+' accounts from '+k+' ('+rows.asAt+'). Accounts not listed by Manager are treated as 0.');if(n<rows.length&&/^balanceSheet/.test(k))log('  NOTE: Balance Sheet shows group totals only. In Manager open Reports > Trial Balance, set the date to today, Save, then refresh here for per-account balances.');return true}
      log('  only '+n+' accounts matched, trying next')}
