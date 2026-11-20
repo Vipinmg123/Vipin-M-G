@@ -30,7 +30,7 @@ button.s{background:#e9eefb;color:#173b91}button.x{background:transparent;color:
 .note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:10px}
 @media(max-width:850px){.row{grid-template-columns:1fr}}
 </style></head><body>
-<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · build v4 · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
+<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · build v5 · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
 <main>
 <section class="kpis" id="kpis"></section>
 
@@ -60,7 +60,7 @@ button.s{background:#e9eefb;color:#173b91}button.x{background:transparent;color:
 <p class="note">2) For receivables open <b>Customers</b>, click <b>Copy to clipboard</b>, paste below.</p>
 <textarea id="pasteCust" rows="3" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:6px" placeholder="Paste Customers table here"></textarea>
 <div class="tools"><button id="importCust">Import receivables</button><span id="custMsg" class="note"></span></div></div>
-<div class="card" style="margin-top:12px"><h2>Live connection log</h2><pre id="diag" style="white-space:pre-wrap;font-size:12px;background:#f0f3f9;border-radius:8px;padding:10px;margin:0;max-height:320px;overflow:auto"></pre><p class="note">Shows what Manager sent to this page. No token is shown.</p></div>
+<div class="card" style="margin-top:12px"><h2>Live connection log</h2><div class="tools" style="margin:0 0 8px"><button class="s" id="copylog">Copy log</button></div><pre id="diag" style="white-space:pre-wrap;font-size:12px;background:#f0f3f9;border-radius:8px;padding:10px;margin:0;max-height:420px;overflow:auto"></pre><p class="note">Shows what Manager sent to this page. No token is shown.</p></div>
 <div class="ed" id="editor"></div></details>
 <p class="note">Privacy: figures stay in this browser's local storage. Do not use on a shared profile. Always confirm figures against Manager's own reports.</p>
 </main>
@@ -166,20 +166,20 @@ function parseTable(text){const lines=text.replace(/\r/g,'').split('\n').filter(
  return{h,col,data:rows.slice(hi+1)}}
 function applyAccounts(list){ // list: [{name,ctrl,actual,avail}]
  const cash=[],cards=[];
- list.forEach(a=>{if(!a.name)return;const isCard=/credit card/i.test(a.ctrl||'')||/credit card/i.test(a.name);
+ list.forEach(a=>{if(!a.name)return;const isCard=a.card||/credit card/i.test(a.ctrl||'')||/credit card/i.test(a.name);
   if(isCard){const prev=D.cards.find(r=>r.name===a.name)||{};const out=-a.actual;
-   const limit=a.avail!=null&&a.avail!==''?Math.round((out+Number(a.avail))*100)/100:(prev.limit||0);
+   const limit=a.avail!=null&&a.avail!==''?Math.round((out+Number(a.avail))*100)/100:(a.lim||prev.limit||0);
    cards.push({name:a.name,amount:Math.round(out*100)/100,limit,due:prev.due||''})}
   else cash.push({name:a.name,amount:a.actual})});
  if(!cash.length&&!cards.length)return false;D.cash=cash;D.cards=cards;buildEditor();render();return true}
 function toArr(b){if(Array.isArray(b))return b;if(b&&typeof b==='object'){for(const k of ['items','data','accounts','rows','results'])if(Array.isArray(b[k]))return b[k]}return[]}
 const num=(o,keys)=>{for(const k of keys)if(o[k]!=null&&o[k]!==''&&isFinite(Number(o[k])))return Number(o[k]);return null};
 const href=l=>l&&(l.href||(l[0]&&l[0].href))||'';
+const nz=o=>{const r={};for(const k of Object.keys(o||{})){const v=o[k];if(v==null||v===false||v===0||v===''||/^obsolete/i.test(k)||k==='customFields'||k==='customFields2')continue;r[k]=v}return r};
 function deepFind(o,re,d){d=d||0;if(!o||typeof o!=='object'||d>4)return null;for(const k of Object.keys(o)){if(k==='_links'||k==='_actions')continue;const v=o[k];if(re.test(k)&&v!=null&&v!==''&&typeof v!=='object'&&isFinite(Number(v)))return Number(v);if(v&&typeof v==='object'){const r=deepFind(v,re,d+1);if(r!=null)return r}}return null}
 function fromApi(arr){return arr.map(a=>{const it=a.item||a,c=it.controlAccount;
  const act=deepFind(a,/^actualbalance$/i);const bal=act!=null?act:(deepFind(a,/^balance$/i)!=null?deepFind(a,/^balance$/i):deepFind(a,/balance/i));
- return{name:it.name||it.Name||it.title||'',code:it.code||'',ctrl:typeof c==='string'?c:(c&&c.name)||'',actual:bal,avail:deepFind(a,/available/i)}})}
-function props(o,out,d){d=d||0;if(!o||typeof o!=='object'||d>9)return;if(o.properties&&typeof o.properties==='object'){for(const k of Object.keys(o.properties)){out.add(k);props(o.properties[k],out,d+1)}}for(const k of Object.keys(o))if(k!=='properties')props(o[k],out,d+1)}
+ return{name:it.name||it.Name||it.title||'',code:it.code||'',ctrl:typeof c==='string'?c:(c&&c.name)||'',actual:bal,avail:deepFind(a,/available/i),card:!!it.hasCreditLimit,lim:it.hasCreditLimit?(Number(it.creditLimit)||0):null}})}
 let busy=false;
 async function tryLive(){if(busy)return;busy=true;try{await tryLive2()}finally{busy=false}}
 async function tryLive2(){
@@ -190,15 +190,27 @@ async function tryLive2(){
  for(const q of ['',bq?'?business='+encodeURIComponent(bq):null]){if(q===null)continue;
   try{const d=await askRaw('/api4/bank-or-cash-account-batch'+q);const arr=toArr(d.body);log('GET bank-or-cash-account-batch'+(q?' (business)':'')+' -> '+d.status+(arr.length?', '+arr.length+' accounts':': '+short(d.error||d.body,120)));if(arr.length){L={arr,body:d.body};break}}catch(e){log('GET bank-or-cash-account-batch -> '+e.message)}}
  if(!L){$('status').textContent='Live read failed. Use the quick import under Update figures';log('Could not list accounts.');return}
- const rows=fromApi(L.arr);log('First account: '+short(L.arr[0],650));
+ const rows=fromApi(L.arr);log('Account fields: '+short(nz(L.arr[0].item||L.arr[0]),420));
+ log('Accounts: '+rows.map(r=>r.code+' '+r.name+(r.card?' [card, limit '+r.lim+']':'')).join('; '));
  if(rows.some(r=>r.actual!=null)){rows.forEach(r=>{if(r.actual==null)r.actual=0});applyAccounts(rows);$('status').textContent='Live: '+rows.length+' accounts with balances ('+new Date().toTimeString().slice(0,5)+')';return}
- /* names only: add to the dashboard without touching amounts, then explore where balances live */
- rows.forEach(r=>{if(!r.name)return;const card=/credit card/i.test(r.name)||/credit card/i.test(r.ctrl||'');const lst=card?D.cards:D.cash;if(!lst.some(x=>x.name===r.name))lst.push(card?{name:r.name,amount:0,limit:0,due:''}:{name:r.name,amount:0})});buildEditor();render();
- try{const self=href(L.arr[0]._links&&L.arr[0]._links.self);if(self){const d=await askRaw(self);log('GET '+self.slice(0,90)+' -> '+d.status+': '+short(d.error||d.body,500))}}catch(e){log('account detail -> '+e.message)}
- try{const ds=href(L.body._links&&L.body._links.describedBy);if(ds){const d=await askRaw(ds);const out=new Set();props(d.body,out);log('Schema '+ds+' -> '+d.status+'; fields: '+Array.from(out).slice(0,80).join(', '))}}catch(e){log('schema -> '+e.message)}
- log('Actions: '+short(Object.keys(L.arr[0]._actions||{}),120)+' | list links: '+short(Object.keys(L.body._links||{}),120));
- $('status').textContent='Live: '+rows.length+' account names read. Balances need quick import';log('Account names read live. Balances are not in this endpoint. Use Quick import for balances.')}
+ rows.forEach(r=>{if(!r.name)return;const card=r.card||/credit card/i.test(r.name);const lst=card?D.cards:D.cash;const ex=lst.find(x=>x.name===r.name);
+  if(!ex)lst.push(card?{name:r.name,amount:0,limit:r.lim||0,due:''}:{name:r.name,amount:0});else if(card&&!ex.limit&&r.lim)ex.limit=r.lim});
+ buildEditor();render();
+ await exploreReports();
+ $('status').textContent='Live: '+rows.length+' accounts and card limits read. Balances: use quick import';log('Balances are not part of the account list. See report discovery above.')}
+async function exploreReports(){
+ let d;try{d=await askRaw('/api4/reports',4000)}catch(e){log('GET /api4/reports -> '+e.message);return}
+ const arr=toArr(d.body);log('GET /api4/reports -> '+d.status+(arr.length?', '+arr.length+' entries':': '+short(d.error||d.body,200)));
+ if(!arr.length)return;
+ log('Report entries: '+arr.slice(0,30).map(r=>short(nz(r.item||r),70)+' '+href(r._links&&r._links.self).slice(0,50)).join(' || '));
+ let tried=0;
+ for(const r of arr){const it=r.item||r,self=href(r._links&&r._links.self),nm=String(it.name||it.title||it.type||'');
+  if(!self||tried>=8||!/balance sheet|profit|trial|receivable|cash ?flow|credit|bank/i.test(nm+self))continue;tried++;
+  const v=self.includes('?')?self.replace('?','-view?'):self+'-view';
+  try{const x=await askRaw(v,4000);log('VIEW '+nm.slice(0,30)+' '+v.slice(0,70)+' -> '+x.status+': '+short(x.error||x.body,260))}catch(e){log('VIEW '+nm.slice(0,30)+' -> '+e.message)}}
+ if(!tried)log('No report entries matched balance sheet / profit / trial / receivable / cash flow.')}
 $('connect').onclick=tryLive;
+$('copylog').onclick=()=>{const t=document.createElement('textarea');t.value=$('diag').textContent;document.body.appendChild(t);t.select();let ok=false;try{ok=document.execCommand('copy')}catch(e){}t.remove();$('copylog').textContent=ok?'Copied':'Select the log text and press Ctrl+C'};
 /* quick import from Manager screens (Copy to clipboard) */
 $('importBank').onclick=()=>{const t=parseTable($('pasteBank').value);const m=$('bankMsg');
  if(!t){m.textContent='Could not find a header row with “Name”. In Manager click Copy to clipboard on the Bank and Cash Accounts screen and paste everything.';return}
