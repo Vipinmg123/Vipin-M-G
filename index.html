@@ -30,7 +30,7 @@ button.s{background:#e9eefb;color:#173b91}button.x{background:transparent;color:
 .note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:10px}
 @media(max-width:850px){.row{grid-template-columns:1fr}}
 </style></head><body>
-<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · build v16 · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
+<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · build v17 · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
 <main>
 <section class="kpis" id="kpis"></section>
 
@@ -190,7 +190,7 @@ async function tryLive2(){
  for(const q of ['',bq?'?business='+encodeURIComponent(bq):null]){if(q===null)continue;
   try{const d=await askRaw('/api4/bank-or-cash-account-batch'+q);const arr=toArr(d.body);log('GET bank-or-cash-account-batch'+(q?' (business)':'')+' -> '+d.status+(arr.length?', '+arr.length+' accounts':': '+short(d.error||d.body,120)));if(arr.length){L={arr,body:d.body};break}}catch(e){log('GET bank-or-cash-account-batch -> '+e.message)}}
  if(!L){$('status').textContent='Live read failed. Use the quick import under Update figures';log('Could not list accounts.');return}
- const rows=fromApi(L.arr);try{log('Account links: '+Object.keys(L.arr[0]._links||{}).join(', ')+' | '+short(Object.entries(L.arr[0]._links||{}).map(([a,b])=>a+'='+href(b)),400))}catch(e){}log('Account fields: '+short(nz(L.arr[0].item||L.arr[0]),420));
+ window.__keys=L.arr.map(a=>(a.item||a).key);const rows=fromApi(L.arr);try{log('Account links: '+Object.keys(L.arr[0]._links||{}).join(', ')+' | '+short(Object.entries(L.arr[0]._links||{}).map(([a,b])=>a+'='+href(b)),400))}catch(e){}log('Account fields: '+short(nz(L.arr[0].item||L.arr[0]),420));
  log('Accounts: '+rows.map(r=>r.code+' '+r.name+(r.card?' [card, limit '+r.lim+']':'')).join('; '));
  if(rows.some(r=>r.actual!=null)){rows.forEach(r=>{if(r.actual==null)r.actual=0});applyAccounts(rows);$('status').textContent='Live: '+rows.length+' accounts with balances ('+new Date().toTimeString().slice(0,5)+')';return}
  rows.forEach(r=>{if(!r.name)return;const card=r.card||/credit card/i.test(r.name);const lst=card?D.cards:D.cash;const ex=lst.find(x=>x.name===r.name);
@@ -244,6 +244,7 @@ function matchBalances(rows,rws,kind){let n=0;const used=new Set();
 async function probeDiag(){
  try{const r=await askRaw('/api4',4000);const lk=(r.body&&r.body._links)||{};log('API root links: '+Object.keys(lk).join(', ').slice(0,1800))}catch(e){log('GET /api4 -> '+e.message)}
  const qs=window.__qs||'';
+ try{const k=(window.__keys||[])[0];if(k){for(const u of ['/api4/bank-or-cash-account/'+k+qs,'/api4/bank-or-cash-account-view/'+k+qs,'/api4/bank-or-cash-account-form/'+k+qs]){try{const x=await askRaw(u,4000);log('PROBE3 '+u.slice(0,60)+' -> '+x.status+': '+short(x.error||x.body,700))}catch(e){log('PROBE3 '+u.slice(0,50)+' -> '+e.message)}}}}catch(e){}
  for(const p of ['bank-and-cash-accounts','bank-or-cash-account-balance','bank-and-cash-account','bank-or-cash-account-summary','bank-or-cash-account-view']){
   for(const sfx of ['-batch','','-view']){try{const x=await askRaw('/api4/'+p+sfx+qs,4000),it=toArr(x.body);log('PROBE2 '+p+sfx+' -> '+x.status+', '+it.length+' items');if(x.status===200)log('  body: '+short(x.body,500))}catch(e){}}}
  for(const p of ['receipt','payment','inter-account-transfer','opening-balance','journal-entry']){
@@ -258,11 +259,11 @@ function nameList(rw){const o=[];walkNodes(rw,nd=>{const nm=nd.name||nd.displayN
 async function loadBalances(rows){
  let d;try{d=await askRaw('/api4/reports',4000)}catch(e){log('GET /api4/reports -> '+e.message);return false}
  const lk=(d.body&&d.body._links)||{};
- for(const k of ['trialBalance','generalLedgerSummary','balanceSheet','bankAccountSummary','balanceSheetByGroup','receiptsAndPaymentsSummary']){
+ for(const k of ['bankAccountSummary','generalLedgerSummary','trialBalance']){
   const h=href(lk[k]);if(!h){log(k+': not offered by Manager');continue}
   const qs=h.includes('?')?'?'+h.split('?')[1]:'',P=h.split('?')[0].replace(/-batch$/,'');
   let items=[];try{const x=await askRaw(h,4000);items=toArr(x.body)}catch(e){log(k+': list failed - '+e.message);continue}
-  log(k+': '+items.length+' saved report(s)');window.__qs=qs;if(items[0])log('  saved item: '+short(items[0],380));
+  log(k+': '+items.length+' saved report(s)');window.__qs=qs;items.forEach(i=>{const it=i.item||i;log('  saved: '+short([it.title,it.periods,it.accountingMethod],260))});
   const q=[];
   items.forEach(i=>{const it=i.item||i;const K=it.key||it.id;
    Object.values(i._links||{}).forEach(b=>{const u=href(b);if(u&&/view|result/i.test(u))q.push(u)});
@@ -273,7 +274,7 @@ async function loadBalances(rows){
    try{const y=await askRaw(u,5000),b=y.body||{},rw=Array.isArray(b.rows)?b.rows:(b.rows&&Array.isArray(b.rows.items)?b.rows.items:[]);
     log('  '+u.slice(0,80)+' -> '+y.status+' rows='+rw.length);if(!rw.length&&y.status===200)log('    empty body: '+short(b,260));
     if(rw.length){log('  report: '+short([b.title,b.subtitles],120));const n=matchBalances(rows,rw,k);if(n<rows.length)log('  names: '+nameList(rw));
-     if(n>=1){rows.asAt=(b.subtitles||[]).join(' · ');if(n<rows.length)log('  names: '+nameList(rw));log('  matched '+n+' of '+rows.length+' accounts from '+k+' ('+rows.asAt+'). Accounts not listed by Manager are treated as 0.');if(n<rows.length&&/^balanceSheet/.test(k))log('  NOTE: Balance Sheet shows group totals only. In Manager open Reports > Trial Balance, set the date to today, Save, then refresh here for per-account balances.');return true}
+     if(n>=Math.min(3,rows.length)){rows.asAt=(b.subtitles||[]).join(' · ');if(n<rows.length)log('  names: '+nameList(rw));log('  matched '+n+' of '+rows.length+' accounts from '+k+' ('+rows.asAt+'). Accounts not listed by Manager are treated as 0.');if(n<rows.length&&/^balanceSheet/.test(k))log('  NOTE: Balance Sheet shows group totals only. In Manager open Reports > Trial Balance, set the date to today, Save, then refresh here for per-account balances.');return true}
      log('  only '+n+' accounts matched, trying next')}
     Object.values(b._links||{}).forEach(l=>{const x=href(l);if(x&&/view|result/i.test(x)&&!tried.has(x))q.push(x)})
    }catch(e){log('  '+u.slice(0,60)+' -> '+e.message)}}}
@@ -311,7 +312,7 @@ $('importCust').onclick=()=>{const t=parseTable($('pasteCust').value);const m=$(
  if(ni<0||ai<0){m.textContent='Missing Name or Balance column.';return}
  const list=t.data.map(r=>({name:r[ni]||'',amount:money(r[ai])})).filter(a=>a.name&&a.amount);
  const prev=D.recv;D.recv=list.map(a=>({name:a.name,amount:a.amount,due:(prev.find(p=>p.name===a.name)||{}).due||''}));buildEditor();render();m.textContent='Imported '+D.recv.length+' customers with balances.'};
-if(inManager()){log('Inside Manager (build v16). Starting live read…');setTimeout(tryLive,600)}else{log('Opened outside Manager. Live read only works from the Manager button.')}
+if(inManager()){log('Inside Manager (build v17). Starting live read…');setTimeout(tryLive,600)}else{log('Opened outside Manager. Live read only works from the Manager button.')}
 buildEditor();render();
 addEventListener('resize',()=>render());
 </script></body></html>
