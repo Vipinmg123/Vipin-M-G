@@ -30,7 +30,7 @@ button.s{background:#e9eefb;color:#173b91}button.x{background:transparent;color:
 .note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:10px}
 @media(max-width:850px){.row{grid-template-columns:1fr}}
 </style></head><body>
-<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · build v10 · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
+<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · build v11 · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
 <main>
 <section class="kpis" id="kpis"></section>
 
@@ -207,7 +207,7 @@ async function tryLive2(){
 /* leaf values of a report row, in order */
 function leaves(o,out,d){out=out||[];d=d||0;if(o==null||d>40)return out;if(typeof o!=='object'){out.push(o);return out}for(const k of Object.keys(o)){if(k==='_links'||k==='_actions')continue;leaves(o[k],out,d+1)}return out}
 const MONEYRE=/^[-−(]?\s*₹?\s*[-−]?\s*[\d,]+(\.\d+)?\)?$/;
-function walkNodes(a,f,d){d=d||0;if(!a||d>40)return;if(Array.isArray(a)){a.forEach(x=>walkNodes(x,f,d+1));return}if(typeof a!=='object')return;f(a);walkNodes(a.rows,f,d+1)}
+function walkNodes(a,f,d){d=d||0;if(!a||d>40)return;if(Array.isArray(a)){a.forEach(x=>walkNodes(x,f,d+1));return}if(typeof a!=='object')return;f(a);walkNodes(a.rows,f,d+1);walkNodes(a.items,f,d+1)}
 function matchBalances(rows,rws,kind){let n=0;const used=new Set();
  const tb=/trialBalance|generalLedgerSummary/.test(kind),sheet=/^balanceSheet/.test(kind);
  const norm=v=>String(v).replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim().toLowerCase();
@@ -255,7 +255,7 @@ async function loadBalances(rows){
   q.push(P+'-view'+qs);
   const tried=new Set();
   while(q.length&&tried.size<10){const u=q.shift();if(tried.has(u))continue;tried.add(u);
-   try{const y=await askRaw(u,5000),b=y.body||{},rw=Array.isArray(b.rows)?b.rows:[];
+   try{const y=await askRaw(u,5000),b=y.body||{},rw=Array.isArray(b.rows)?b.rows:(b.rows&&Array.isArray(b.rows.items)?b.rows.items:[]);
     log('  '+u.slice(0,80)+' -> '+y.status+' rows='+rw.length);if(!rw.length&&y.status===200)log('    empty body: '+short(b,260));
     if(rw.length){log('  report: '+short([b.title,b.subtitles],120));const n=matchBalances(rows,rw,k);if(!n)log('  raw rows: '+short(rw,900));
      if(n>=1){rows.asAt=(b.subtitles||[]).join(' · ');if(n<rows.length)log('  raw rows: '+short(rw,1500));log('  matched '+n+' of '+rows.length+' accounts from '+k+' ('+rows.asAt+'). Accounts not listed by Manager are treated as 0.');if(n<rows.length&&/^balanceSheet/.test(k))log('  NOTE: Balance Sheet shows group totals only. In Manager open Reports > Trial Balance, set the date to today, Save, then refresh here for per-account balances.');return true}
