@@ -201,26 +201,31 @@ async function tryLive2(){
  if(ok){const got=rows.filter(r=>r.actual!=null).length;rows.forEach(r=>{if(r.actual==null)r.actual=0});applyAccounts(rows);
   $('status').textContent='Live: '+got+' of '+rows.length+' account balances ('+new Date().toTimeString().slice(0,5)+')';
   $('diag').textContent='';log('Live read OK: '+got+' of '+rows.length+' balances loaded. Verify against Manager.');return}
- log('Could not read balances from reports. Running discovery…');
+ log('Could not read balances from reports. Use Quick import under Update figures (Copy to clipboard on Bank and Cash Accounts).');
  await exploreReports();
  $('status').textContent='Live: '+rows.length+' accounts and card limits read. Balances: use quick import'}
 /* leaf values of a report row, in order */
-function leaves(o,out,d){out=out||[];d=d||0;if(o==null||d>6)return out;if(typeof o!=='object'){out.push(o);return out}for(const k of Object.keys(o)){if(k==='_links'||k==='_actions')continue;leaves(o[k],out,d+1)}return out}
+function leaves(o,out,d){out=out||[];d=d||0;if(o==null||d>40)return out;if(typeof o!=='object'){out.push(o);return out}for(const k of Object.keys(o)){if(k==='_links'||k==='_actions')continue;leaves(o[k],out,d+1)}return out}
 const MONEYRE=/^[-−(]?\s*₹?\s*[-−]?\s*[\d,]+(\.\d+)?\)?$/;
-function matchBalances(rows,rws,absCards){let n=0;const seen=new Set();
- rws.forEach(rw=>{const lv=leaves(rw),txt=lv.filter(v=>typeof v==='string').map(s=>s.trim().toLowerCase());
-  const a=rows.find(r=>r.name&&!seen.has(r)&&txt.some(t=>t===r.name.toLowerCase()||t===(r.code+' - '+r.name).toLowerCase()||t.endsWith(' - '+r.name.toLowerCase())));
-  if(!a)return;
-  const nums=lv.filter(v=>typeof v==='number'||(typeof v==='string'&&MONEYRE.test(v.trim())&&/\d/.test(v)&&!/[a-z]/i.test(v)));
+function matchBalances(rows,rws,kind){let n=0;const lv=leaves(rws),used=new Set();
+ const isLbl=v=>typeof v==='string'&&/[a-z]/i.test(v);const isNum=v=>typeof v==='number'||(typeof v==='string'&&MONEYRE.test(v.trim())&&/\d/.test(v));
+ const tb=/trialBalance|generalLedgerSummary/.test(kind),sheet=/^balanceSheet/.test(kind);
+ const norm=v=>String(v).replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim().toLowerCase();
+ const order=rows.filter(a=>a.name).slice().sort((x,y)=>y.name.length-x.name.length);
+ order.forEach(a=>{const nm=a.name.toLowerCase(),full=((a.code||'')+' - '+a.name).toLowerCase();
+  let i=lv.findIndex((v,k)=>!used.has(k)&&typeof v==='string'&&(()=>{const t=norm(v);return t===nm||t===full||t.endsWith(' - '+nm)})());
+  if(i<0)i=lv.findIndex((v,k)=>!used.has(k)&&typeof v==='string'&&norm(v).includes(nm));
+  if(i<0)return;used.add(i);const nums=[];
+  for(let j=i+1;j<Math.min(lv.length,i+8);j++){const v=lv[j];if(isLbl(v))break;if(isNum(v))nums.push(typeof v==='number'?v:money(v))}
   if(!nums.length)return;
-  const last=nums[nums.length-1];let v=typeof last==='number'?last:money(last);
-  if(absCards&&(a.card||/credit card/i.test(a.name)))v=-Math.abs(v);
-  a.actual=v;seen.add(a);n++;if(n===1)log('  sample row: '+short(lv,200))});
+  let x=tb&&nums.length>=2?nums[0]-nums[1]:nums[0];
+  if(sheet&&(a.card||/credit card/i.test(a.name)))x=-Math.abs(x);
+  a.actual=x;n++});
  return n}
 async function loadBalances(rows){
  let d;try{d=await askRaw('/api4/reports',4000)}catch(e){log('GET /api4/reports -> '+e.message);return false}
  const lk=(d.body&&d.body._links)||{};
- for(const k of ['bankAccountSummary','balanceSheet','balanceSheetByGroup']){
+ for(const k of ['trialBalance','generalLedgerSummary','balanceSheet','bankAccountSummary','balanceSheetByGroup','receiptsAndPaymentsSummary']){
   const h=href(lk[k]);if(!h){log(k+': not offered by Manager');continue}
   const qs=h.includes('?')?'?'+h.split('?')[1]:'',P=h.split('?')[0].replace(/-batch$/,'');
   let items=[];try{const x=await askRaw(h,4000);items=toArr(x.body)}catch(e){log(k+': list failed - '+e.message);continue}
@@ -234,7 +239,7 @@ async function loadBalances(rows){
   while(q.length&&tried.size<10){const u=q.shift();if(tried.has(u))continue;tried.add(u);
    try{const y=await askRaw(u,5000),b=y.body||{},rw=Array.isArray(b.rows)?b.rows:[];
     log('  '+u.slice(0,80)+' -> '+y.status+' rows='+rw.length);
-    if(rw.length){const n=matchBalances(rows,rw,k!=='bankAccountSummary');
+    if(rw.length){log('  report: '+short([b.title,b.subtitles],120));const n=matchBalances(rows,rw,k);if(!n)log('  raw rows: '+short(rw,900));
      if(n>=Math.ceil(rows.length/2)){log('  matched '+n+' accounts from '+k);return true}
      log('  only '+n+' accounts matched, trying next')}
     Object.values(b._links||{}).forEach(l=>{const x=href(l);if(x&&/view|result/i.test(x)&&!tried.has(x))q.push(x)})
