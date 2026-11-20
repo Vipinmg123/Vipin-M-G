@@ -1,0 +1,284 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Personal Finance ERP</title>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--ink:#172033;--muted:#667085;--line:#e5e9f0;--accent:#2457d6;--good:#17663b;--bad:#b42318;--warn:#8a5a00}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px system-ui,Segoe UI,Arial}
+header{background:#15233c;color:#fff;padding:18px 24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+header h1{margin:0;font-size:20px}header p{margin:2px 0 0;color:#cbd5e1;font-size:13px}
+#status{font-size:12px;color:#cbd5e1}
+main{padding:18px;max-width:1400px;margin:auto}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:0 2px 8px #15233c08}
+.k{color:var(--muted);font-size:12px}.v{font-size:22px;font-weight:700;margin-top:6px;font-variant-numeric:tabular-nums}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+h2{font-size:15px;margin:0 0 10px}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:600;font-size:12px}
+.n{text-align:right;font-variant-numeric:tabular-nums}
+tr.grp td{background:#f0f3f9;font-weight:700}tr.tot td{font-weight:700;border-top:2px solid var(--line)}tr.big td{font-weight:800;background:#e9eefb}
+.pos{color:var(--good)}.neg{color:var(--bad)}.warn{color:var(--warn)}.muted{color:var(--muted)}
+canvas{width:100%;height:230px;display:block}
+.bar{height:8px;background:#e9eefb;border-radius:6px;overflow:hidden;min-width:80px}.bar i{display:block;height:100%;background:var(--accent)}.bar i.hi{background:var(--bad)}
+.empty{color:var(--muted);padding:6px 0}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}.chip{background:#f0f3f9;border-radius:8px;padding:5px 9px;font-size:12px}
+details{margin-top:14px}summary{cursor:pointer;font-weight:700;padding:12px 16px;background:var(--card);border:1px solid var(--line);border-radius:12px}
+.ed{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;margin-top:12px}
+.ed input,.ed select{width:100%;padding:6px;border:1px solid var(--line);border-radius:6px;background:#fff;font:inherit}
+button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:7px 12px;cursor:pointer;font-weight:600;font:inherit;font-weight:600}
+button.s{background:#e9eefb;color:#173b91}button.x{background:transparent;color:var(--bad);padding:4px 8px}
+.tools{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center}
+.note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:10px}
+@media(max-width:850px){.row{grid-template-columns:1fr}}
+</style></head><body>
+<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · build v8 · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
+<main>
+<section class="kpis" id="kpis"></section>
+
+<section class="row">
+<div class="card"><h2>Cash positions</h2><div id="cash"></div></div>
+<div class="card"><h2>Cash flow</h2><canvas id="cfChart"></canvas><div id="cf"></div></div>
+</section>
+
+<section class="row">
+<div class="card"><h2>Profit &amp; loss position</h2><div id="pl"></div></div>
+<div class="card"><h2>Balance sheet position</h2><div id="bs"></div></div>
+</section>
+
+<section class="row">
+<div class="card"><h2>Receivables</h2><div id="recv"></div></div>
+<div class="card"><h2>Credit card outstanding</h2><div id="cards"></div></div>
+</section>
+
+<details id="edit"><summary>Update figures</summary>
+<div class="card" style="margin-top:12px"><div style="max-width:320px"><label class="k">Period label (e.g. Nov 2026)</label><br><input id="period" style="width:100%;padding:7px;border:1px solid var(--line);border-radius:6px"></div>
+<p class="note">Enter your closing balances from Manager's reports (Bank and Cash Accounts, Profit and Loss Statement, Balance Sheet, Aged Receivables, credit card accounts). Figures are saved in this browser only. Dashboard updates as you type.</p>
+<div class="tools"><button class="s" id="example">Load example figures</button><button class="s" id="clear">Clear all figures</button><button class="s" id="connect">Refresh live data from Manager</button></div></div>
+<div class="card" style="margin-top:12px"><h2>Quick import from Manager screens</h2>
+<p class="note">1) In Manager open <b>Bank and Cash Accounts</b>, click <b>Copy to clipboard</b> (bottom right), then paste below. Bank accounts fill Cash positions and Credit Cards accounts fill Credit card outstanding (limit = outstanding + available credit).</p>
+<textarea id="pasteBank" rows="4" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:6px" placeholder="Paste Bank and Cash Accounts table here"></textarea>
+<div class="tools"><button id="importBank">Import accounts</button><span id="bankMsg" class="note"></span></div>
+<p class="note">2) For receivables open <b>Customers</b>, click <b>Copy to clipboard</b>, paste below.</p>
+<textarea id="pasteCust" rows="3" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:6px" placeholder="Paste Customers table here"></textarea>
+<div class="tools"><button id="importCust">Import receivables</button><span id="custMsg" class="note"></span></div></div>
+<div class="card" style="margin-top:12px"><h2>Live connection log</h2><div class="tools" style="margin:0 0 8px"><button class="s" id="copylog">Copy log</button><button class="s" id="clearlog">Clear log</button></div><pre id="diag" style="white-space:pre-wrap;font-size:12px;background:#f0f3f9;border-radius:8px;padding:10px;margin:0;max-height:420px;overflow:auto"></pre><p class="note">Shows what Manager sent to this page. No token is shown.</p></div>
+<div class="ed" id="editor"></div></details>
+<p class="note">Privacy: figures stay in this browser's local storage. Do not use on a shared profile. Always confirm figures against Manager's own reports.</p>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=n=>(n<0?'-':'')+'₹'+Math.abs(Number(n||0)).toLocaleString('en-IN',{maximumFractionDigits:2});
+const cls=v=>v>0?'pos':v<0?'neg':'';
+const KEY='pferp_fd_v1';
+const GROUPS=[['income','Income'],['cos','Cost of sales'],['expense','Expenses'],['opex','Operating expenses'],['otherinc','Other income'],['finance','Finance costs']];
+const SEC={
+ cash:{t:'Cash & bank accounts',f:[['name','Account','text'],['amount','Balance ₹','number']]},
+ recv:{t:'Receivables (customers owe you)',f:[['name','Customer','text'],['amount','Amount ₹','number'],['due','Due date','date']]},
+ cards:{t:'Credit cards',f:[['name','Card','text'],['amount','Outstanding ₹','number'],['limit','Limit ₹','number'],['due','Due date','date']]},
+ loans:{t:'Loans',f:[['name','Loan','text'],['amount','Outstanding ₹','number']]},
+ assets:{t:'Other assets (investments, FD, fixed assets)',f:[['name','Asset','text'],['amount','Value ₹','number']]},
+ liabs:{t:'Other liabilities (GST, payables)',f:[['name','Liability','text'],['amount','Amount ₹','number']]},
+ pl:{t:'Profit & loss lines',f:[['group','Section','group'],['name','Account','text'],['amount','Amount ₹','number']]},
+ cf:{t:'Cash flow by month',f:[['month','Month (YYYY-MM)','text'],['in','Money in ₹','number'],['out','Money out ₹','number']]}
+};
+const EMPTY=()=>({period:'',cash:[],recv:[],cards:[],loans:[],assets:[],liabs:[],pl:[],cf:[]});
+let D=EMPTY();
+try{const s=JSON.parse(localStorage.getItem(KEY)||'null');if(s)D=Object.assign(EMPTY(),s)}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(D))}catch(e){}}
+const sum=(a,f='amount')=>(D[a]||[]).reduce((t,r)=>t+(Number(r[f])||0),0);
+const noData='<div class="empty">No figures yet. Open “Update figures” below.</div>';
+function listTable(rows,cols){return '<table><tbody>'+rows.map(r=>'<tr>'+cols.map((c,i)=>'<td'+(i?' class="n"':'')+'>'+c(r)+'</td>').join('')+'</tr>').join('')+'</tbody></table>'}
+
+function compute(){
+ const g={};GROUPS.forEach(([k])=>g[k]=D.pl.filter(r=>r.group===k).reduce((t,r)=>t+(Number(r.amount)||0),0));
+ const gross=g.income-g.cos,op=gross-g.expense-g.opex,net=op+g.otherinc-g.finance;
+ const cash=sum('cash'),recv=sum('recv'),cards=sum('cards'),loans=sum('loans'),oa=sum('assets'),ol=sum('liabs');
+ const assets=cash+recv+oa,liab=cards+loans+ol;
+ const cfIn=sum('cf','in'),cfOut=sum('cf','out');
+ return{g,gross,op,net,cash,recv,cards,loans,oa,ol,assets,liab,netAssets:assets-liab,cfIn,cfOut,cfNet:cfIn-cfOut};
+}
+function fit(c){const r=c.getBoundingClientRect(),d=window.devicePixelRatio||1;c.width=Math.max(300,Math.round((r.width||600)*d));c.height=Math.round((r.height||230)*d);return{x:c.getContext('2d'),w:c.width,h:c.height,d}}
+function drawBars(c,labels,sets){
+ const{x,w,h,d}=fit(c);x.clearRect(0,0,w,h);
+ if(!labels.length){x.fillStyle='#667085';x.font=13*d+'px Arial';x.fillText('No cash flow figures yet',20*d,40*d);return}
+ const max=Math.max(1,...sets.flatMap(s=>s.v)),left=56*d,bottom=h-30*d,top=14*d,ph=bottom-top,pw=w-left-12*d;
+ x.strokeStyle='#e5e9f0';x.fillStyle='#667085';x.font=11*d+'px Arial';x.textAlign='right';
+ for(let i=0;i<=4;i++){const y=top+ph*i/4;x.beginPath();x.moveTo(left,y);x.lineTo(w-8*d,y);x.stroke();const val=max*(1-i/4);x.fillText(val>=100000?(val/100000).toFixed(1)+'L':val>=1000?Math.round(val/1000)+'k':Math.round(val),left-6*d,y+4*d)}
+ const gp=pw/labels.length,bw=Math.min(30*d,gp/(sets.length+1));x.textAlign='center';
+ labels.forEach((lab,i)=>{sets.forEach((s,j)=>{const bh=Math.max(0,s.v[i]||0)/max*(ph-4*d),bx=left+i*gp+gp/2+(j-(sets.length-1)/2)*(bw+3*d)-bw/2;x.fillStyle=s.c;x.fillRect(bx,bottom-bh,bw,bh)});x.fillStyle='#667085';x.fillText(lab.slice(2),left+i*gp+gp/2,bottom+16*d)});
+}
+function render(){
+ const m=compute();
+ $('periodLbl').textContent=D.period||'set period under Update figures';
+ $('kpis').innerHTML=[['Cash & bank',m.cash,''],['Receivables',m.recv,''],['Credit card outstanding',m.cards,m.cards>0?'neg':''],['Net profit (loss)',m.net,cls(m.net)],['Net cash flow',m.cfNet,cls(m.cfNet)],['Net assets',m.netAssets,cls(m.netAssets)]]
+  .map(([k,v,c])=>`<div class="card"><div class="k">${k}</div><div class="v ${c}">${fmt(v)}</div></div>`).join('');
+ $('cash').innerHTML=D.cash.length?listTable(D.cash,[r=>esc(r.name),r=>fmt(r.amount)])+`<table><tbody><tr class="tot"><td>Total cash &amp; bank</td><td class="n">${fmt(m.cash)}</td></tr></tbody></table>`:noData;
+ const cf=D.cf.filter(r=>r.month).slice().sort((a,b)=>a.month<b.month?-1:1).slice(-8);
+ drawBars($('cfChart'),cf.map(r=>r.month),[{v:cf.map(r=>+r.in||0),c:'#2457d6'},{v:cf.map(r=>+r.out||0),c:'#e29a32'}]);
+ $('cf').innerHTML=cf.length?'<table><thead><tr><th>Month</th><th class="n">In</th><th class="n">Out</th><th class="n">Net</th></tr></thead><tbody>'+cf.map(r=>{const n=(+r.in||0)-(+r.out||0);return`<tr><td>${esc(r.month)}</td><td class="n">${fmt(r.in)}</td><td class="n">${fmt(r.out)}</td><td class="n ${cls(n)}">${fmt(n)}</td></tr>`}).join('')+`<tr class="tot"><td>Total</td><td class="n">${fmt(m.cfIn)}</td><td class="n">${fmt(m.cfOut)}</td><td class="n ${cls(m.cfNet)}">${fmt(m.cfNet)}</td></tr></tbody></table>`:'';
+ const sec=(k,l)=>{const rs=D.pl.filter(r=>r.group===k);return rs.length?`<tr class="grp"><td colspan="2">${l}</td></tr>`+rs.map(r=>`<tr><td>&nbsp;&nbsp;${esc(r.name)}</td><td class="n">${fmt(r.amount)}</td></tr>`).join('')+`<tr class="tot"><td>Total — ${l}</td><td class="n">${fmt(m.g[k])}</td></tr>`:''};
+ $('pl').innerHTML=D.pl.length?'<table><tbody>'+sec('income','Income')+sec('cos','Cost of sales')+`<tr class="tot"><td>Gross profit (loss)</td><td class="n">${fmt(m.gross)}</td></tr>`+sec('expense','Expenses')+sec('opex','Operating expenses')+`<tr class="tot"><td>Operating profit (loss)</td><td class="n">${fmt(m.op)}</td></tr>`+sec('otherinc','Other income')+sec('finance','Finance costs')+`<tr class="big"><td>Net profit (loss)</td><td class="n ${cls(m.net)}">${fmt(m.net)}</td></tr></tbody></table>`:noData;
+ const has=m.assets||m.liab;
+ $('bs').innerHTML=has?`<table><tbody><tr class="grp"><td colspan="2">Assets</td></tr><tr><td>&nbsp;&nbsp;Cash &amp; bank</td><td class="n">${fmt(m.cash)}</td></tr><tr><td>&nbsp;&nbsp;Receivables</td><td class="n">${fmt(m.recv)}</td></tr>${D.assets.map(r=>`<tr><td>&nbsp;&nbsp;${esc(r.name)}</td><td class="n">${fmt(r.amount)}</td></tr>`).join('')}<tr class="tot"><td>Total assets</td><td class="n">${fmt(m.assets)}</td></tr>
+ <tr class="grp"><td colspan="2">Liabilities</td></tr><tr><td>&nbsp;&nbsp;Credit cards</td><td class="n">${fmt(m.cards)}</td></tr>${D.loans.map(r=>`<tr><td>&nbsp;&nbsp;${esc(r.name)}</td><td class="n">${fmt(r.amount)}</td></tr>`).join('')}${D.liabs.map(r=>`<tr><td>&nbsp;&nbsp;${esc(r.name)}</td><td class="n">${fmt(r.amount)}</td></tr>`).join('')}<tr class="tot"><td>Total liabilities</td><td class="n">${fmt(m.liab)}</td></tr>
+ <tr class="big"><td>Net assets</td><td class="n ${cls(m.netAssets)}">${fmt(m.netAssets)}</td></tr></tbody></table>`:noData;
+ const today=new Date().toISOString().slice(0,10),od=D.recv.filter(r=>r.due&&r.due<today),odT=od.reduce((t,r)=>t+(+r.amount||0),0);
+ $('recv').innerHTML=D.recv.length?`<div class="chips"><span class="chip">Total ${fmt(m.recv)}</span><span class="chip ${odT?'neg':''}">Overdue ${fmt(odT)}</span></div><table><thead><tr><th>Customer</th><th>Due</th><th class="n">Amount</th></tr></thead><tbody>`+D.recv.map(r=>`<tr><td>${esc(r.name)}</td><td class="${r.due&&r.due<today?'neg':''}">${esc(r.due||'')}${r.due&&r.due<today?' · overdue':''}</td><td class="n">${fmt(r.amount)}</td></tr>`).join('')+'</tbody></table>':noData;
+ $('cards').innerHTML=D.cards.length?`<div class="chips"><span class="chip">Outstanding ${fmt(m.cards)}</span><span class="chip">Limit ${fmt(sum('cards','limit'))}</span></div><table><thead><tr><th>Card</th><th>Due</th><th>Used</th><th class="n">Outstanding</th></tr></thead><tbody>`+D.cards.map(r=>{const u=+r.limit>0?Math.min(100,Math.round((+r.amount||0)/+r.limit*100)):null;return`<tr><td>${esc(r.name)}</td><td>${esc(r.due||'')}</td><td>${u===null?'':`<div class="bar"><i class="${u>=70?'hi':''}" style="width:${u}%"></i></div><span class="muted">${u}%</span>`}</td><td class="n">${fmt(r.amount)}</td></tr>`}).join('')+'</tbody></table>':noData;
+ save();
+}
+/* ---- editor ---- */
+function buildEditor(){
+ $('editor').innerHTML=Object.entries(SEC).map(([k,s])=>`<div class="card"><h2>${s.t}</h2><table><thead><tr>${s.f.map(f=>`<th>${f[1]}</th>`).join('')}<th></th></tr></thead><tbody>`+D[k].map((r,i)=>'<tr>'+s.f.map(([f,,t])=>'<td>'+(t==='group'?`<select data-k="${k}" data-i="${i}" data-f="${f}">${GROUPS.map(([v,l])=>`<option value="${v}"${r[f]===v?' selected':''}>${l}</option>`).join('')}</select>`:`<input data-k="${k}" data-i="${i}" data-f="${f}" type="${t}" ${t==='number'?'step="any"':''} value="${esc(r[f]??'')}">`)+'</td>').join('')+`<td><button class="x" data-del="${k}" data-i="${i}" title="Remove">✕</button></td></tr>`).join('')+`</tbody></table><div class="tools"><button class="s" data-add="${k}">+ Add row</button></div></div>`).join('');
+}
+$('editor').addEventListener('input',e=>{const t=e.target,k=t.dataset.k;if(!k)return;const i=+t.dataset.i,f=t.dataset.f;D[k][i][f]=t.type==='number'?(t.value===''?0:Number(t.value)):t.value;render()});
+$('editor').addEventListener('click',e=>{const t=e.target;
+ if(t.dataset.add){const k=t.dataset.add,r={};SEC[k].f.forEach(([f,,ty])=>r[f]=ty==='number'?0:ty==='group'?'expense':'');D[k].push(r);buildEditor();render()}
+ if(t.dataset.del){D[t.dataset.del].splice(+t.dataset.i,1);buildEditor();render()}});
+$('period').value=D.period;$('period').oninput=e=>{D.period=e.target.value;render()};
+$('example').onclick=()=>{D={period:'Example: Nov 2026',
+ cash:[{name:'HDFC Savings',amount:182500},{name:'Other Bank Savings',amount:46200},{name:'Cash in Hand',amount:5000}],
+ recv:[{name:'Client A',amount:25000,due:'2026-11-05'},{name:'Client B',amount:12000,due:'2026-12-10'}],
+ cards:[{name:'HDFC Credit Card',amount:34500,limit:150000,due:'2026-12-05'},{name:'SBI Credit Card',amount:92000,limit:120000,due:'2026-12-12'}],
+ loans:[{name:'Cholamandalam loan',amount:210000}],assets:[{name:'Investments',amount:350000},{name:'Fixed assets',amount:120000}],liabs:[{name:'GST',amount:6200}],
+ pl:[{group:'income',name:'Sales',amount:65000},{group:'otherinc',name:'Interest income',amount:850},{group:'expense',name:'Groceries',amount:4500},{group:'opex',name:'Utilities',amount:1800},{group:'finance',name:'Interest expense',amount:2400}],
+ cf:[{month:'2026-08',in:60000,out:48000},{month:'2026-09',in:62000,out:51000},{month:'2026-10',in:65000,out:70000},{month:'2026-11',in:65850,out:25399}]};
+ $('period').value=D.period;buildEditor();render()};
+let armed=false;$('clear').onclick=()=>{if(!armed){armed=true;$('clear').textContent='Click again to confirm';setTimeout(()=>{armed=false;$('clear').textContent='Clear all figures'},3000);return}armed=false;$('clear').textContent='Clear all figures';D=EMPTY();$('period').value='';buildEditor();render()};
+/* ---- Manager link: live read + quick import ---- */
+const MGR={endpoint:null,token:null};let seen=0;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function log(m){const el=$('diag');if(!el)return;const t=new Date().toTimeString().slice(0,8);el.textContent=(el.textContent+t+'  '+m+'\n').split('\n').slice(-150).join('\n')}
+function scan(o,d){d=d||0;if(!o||typeof o!=='object'||d>4)return;for(const k of Object.keys(o)){const v=o[k];if(typeof v==='string'){if(/token|apikey|api_key|authorization/i.test(k)&&!MGR.token)MGR.token=v.replace(/^Bearer\s+/i,'');if(/endpoint|apiurl|api_url|baseurl|base_url|^api$/i.test(k)&&/^(https?:\/\/|\/)/.test(v)&&!MGR.endpoint)MGR.endpoint=v}else scan(v,d+1)}}
+function inManager(){try{return parent!==window}catch(e){return false}}
+addEventListener('message',e=>{if(!inManager()||e.source!==parent)return;let d=e.data;if(typeof d==='string'){try{d=JSON.parse(d)}catch(x){return}}
+ if(d&&typeof d==='object'){scan(d);if(d.type==='page-response')MGR.page=d.body;if(seen++<15)log('Manager sent: type='+(d.type||'?')+' keys='+Object.keys(d).join(','))}});
+const short=(x,n)=>{let s;try{s=typeof x==='string'?x:JSON.stringify(x)}catch(e){s=String(x)}return(s||'').replace(/\s+/g,' ').slice(0,n||170)};
+function askRaw(path,ms){return new Promise((res,rej)=>{const id=String(Date.now())+Math.random();const t=setTimeout(()=>{removeEventListener('message',f);rej(Error('no reply'))},ms||3500);
+ function f(e){const d=e.data;if(d&&typeof d==='object'&&/api-(request-)?response/.test(d.type||'')&&(!d.requestId||d.requestId===id)){clearTimeout(t);removeEventListener('message',f);res(d)}}
+ addEventListener('message',f);parent.postMessage({type:'api-request',method:'GET',path,requestId:id},'*')})}
+/* money text such as "- ₹ 8,205.69" or "₹ 13,425.37" -> number */
+function money(s){s=String(s==null?'':s).trim();if(!s)return 0;const neg=/^[-−(]/.test(s)||/[-−]\s*₹/.test(s)||/₹\s*[-−]/.test(s);const n=parseFloat(s.replace(/[^0-9.]/g,''));return isFinite(n)?(neg?-n:n):0}
+function parseTable(text){const lines=text.replace(/\r/g,'').split('\n').filter(x=>x.trim());const del=text.includes('\t')?'\t':',';
+ const rows=lines.map(l=>l.split(del).map(c=>c.trim().replace(/^"|"$/g,'')));
+ const hi=rows.findIndex(r=>r.some(c=>/^name$/i.test(c)));if(hi<0)return null;
+ const h=rows[hi],col=re=>h.findIndex(c=>re.test(c));
+ return{h,col,data:rows.slice(hi+1)}}
+function applyAccounts(list){ // list: [{name,ctrl,actual,avail}]
+ const cash=[],cards=[];
+ list.forEach(a=>{if(!a.name)return;const isCard=a.card||/credit card/i.test(a.ctrl||'')||/credit card/i.test(a.name);
+  if(isCard){const prev=D.cards.find(r=>r.name===a.name)||{};const out=-a.actual;
+   const limit=a.avail!=null&&a.avail!==''?Math.round((out+Number(a.avail))*100)/100:(a.lim||prev.limit||0);
+   cards.push({name:a.name,amount:Math.round(out*100)/100,limit,due:prev.due||''})}
+  else cash.push({name:a.name,amount:a.actual})});
+ if(!cash.length&&!cards.length)return false;D.cash=cash;D.cards=cards;buildEditor();render();return true}
+function toArr(b){if(Array.isArray(b))return b;if(b&&typeof b==='object'){for(const k of ['items','data','accounts','rows','results'])if(Array.isArray(b[k]))return b[k]}return[]}
+const num=(o,keys)=>{for(const k of keys)if(o[k]!=null&&o[k]!==''&&isFinite(Number(o[k])))return Number(o[k]);return null};
+const href=l=>l&&(l.href||(l[0]&&l[0].href))||'';
+const nz=o=>{const r={};for(const k of Object.keys(o||{})){const v=o[k];if(v==null||v===false||v===0||v===''||/^obsolete/i.test(k)||k==='customFields'||k==='customFields2')continue;r[k]=v}return r};
+function deepFind(o,re,d){d=d||0;if(!o||typeof o!=='object'||d>4)return null;for(const k of Object.keys(o)){if(k==='_links'||k==='_actions'||/^obsolete/i.test(k))continue;const v=o[k];if(re.test(k)&&v!=null&&v!==''&&typeof v!=='object'&&isFinite(Number(v)))return Number(v);if(v&&typeof v==='object'){const r=deepFind(v,re,d+1);if(r!=null)return r}}return null}
+function fromApi(arr){return arr.map(a=>{const it=a.item||a,c=it.controlAccount;
+ const bal=[/^actualbalance$/i,/^clearedbalance$/i,/^balance$/i].map(re=>deepFind(a,re)).find(v=>v!=null);
+ return{name:it.name||it.Name||it.title||'',code:it.code||'',ctrl:typeof c==='string'?c:(c&&c.name)||'',actual:bal,avail:deepFind(a,/^availablecredit$/i),card:!!it.hasCreditLimit,lim:it.hasCreditLimit?(Number(it.creditLimit)||0):null}})}
+let busy=false;
+async function tryLive(){if(busy)return;busy=true;try{await tryLive2()}finally{busy=false}}
+async function tryLive2(){
+ if(!inManager()){$('status').textContent='Open this page from the Manager button to read live data';log('Page is not inside Manager.');return}
+ $('status').textContent='Connecting to Manager…';log('Requesting page context…');try{parent.postMessage({type:'page-request'},'*')}catch(e){}
+ await sleep(600);if(MGR.page)log('Page context: '+short(MGR.page,200));
+ let L=null;const bq=MGR.page&&MGR.page.query&&MGR.page.query.business;
+ for(const q of ['',bq?'?business='+encodeURIComponent(bq):null]){if(q===null)continue;
+  try{const d=await askRaw('/api4/bank-or-cash-account-batch'+q);const arr=toArr(d.body);log('GET bank-or-cash-account-batch'+(q?' (business)':'')+' -> '+d.status+(arr.length?', '+arr.length+' accounts':': '+short(d.error||d.body,120)));if(arr.length){L={arr,body:d.body};break}}catch(e){log('GET bank-or-cash-account-batch -> '+e.message)}}
+ if(!L){$('status').textContent='Live read failed. Use the quick import under Update figures';log('Could not list accounts.');return}
+ const rows=fromApi(L.arr);log('Account fields: '+short(nz(L.arr[0].item||L.arr[0]),420));
+ log('Accounts: '+rows.map(r=>r.code+' '+r.name+(r.card?' [card, limit '+r.lim+']':'')).join('; '));
+ if(rows.some(r=>r.actual!=null)){rows.forEach(r=>{if(r.actual==null)r.actual=0});applyAccounts(rows);$('status').textContent='Live: '+rows.length+' accounts with balances ('+new Date().toTimeString().slice(0,5)+')';return}
+ rows.forEach(r=>{if(!r.name)return;const card=r.card||/credit card/i.test(r.name);const lst=card?D.cards:D.cash;const ex=lst.find(x=>x.name===r.name);
+  if(!ex)lst.push(card?{name:r.name,amount:0,limit:r.lim||0,due:''}:{name:r.name,amount:0});else if(card&&!ex.limit&&r.lim)ex.limit=r.lim});
+ buildEditor();render();
+ $('status').textContent='Reading balances from Manager reports…';
+ const ok=await loadBalances(rows);
+ if(ok){const got=rows.filter(r=>r.actual!=null).length;rows.forEach(r=>{if(r.actual==null)r.actual=0});applyAccounts(rows);
+  $('status').textContent='Live: '+got+' of '+rows.length+' accounts have balances · '+(rows.asAt||'')+' · read '+new Date().toTimeString().slice(0,5);
+  log('Live read OK: '+got+' of '+rows.length+' balances loaded ('+(rows.asAt||'')+'). Verify against Manager.');return}
+ log('Could not read balances from reports. Use Quick import under Update figures (Copy to clipboard on Bank and Cash Accounts).');
+ await exploreReports();
+ $('status').textContent='Live: '+rows.length+' accounts and card limits read. Balances: use quick import'}
+/* leaf values of a report row, in order */
+function leaves(o,out,d){out=out||[];d=d||0;if(o==null||d>40)return out;if(typeof o!=='object'){out.push(o);return out}for(const k of Object.keys(o)){if(k==='_links'||k==='_actions')continue;leaves(o[k],out,d+1)}return out}
+const MONEYRE=/^[-−(]?\s*₹?\s*[-−]?\s*[\d,]+(\.\d+)?\)?$/;
+function matchBalances(rows,rws,kind){let n=0;const lv=leaves(rws),used=new Set();
+ const isLbl=v=>typeof v==='string'&&/[a-z]/i.test(v);const isNum=v=>typeof v==='number'||(typeof v==='string'&&MONEYRE.test(v.trim())&&/\d/.test(v));
+ const tb=/trialBalance|generalLedgerSummary/.test(kind),sheet=/^balanceSheet/.test(kind);
+ const norm=v=>String(v).replace(/<[^>]*>/g,'').replace(/\s+/g,' ').trim().toLowerCase();
+ const order=rows.filter(a=>a.name).slice().sort((x,y)=>y.name.length-x.name.length);
+ order.forEach(a=>{const nm=a.name.toLowerCase(),full=((a.code||'')+' - '+a.name).toLowerCase();
+  let i=lv.findIndex((v,k)=>!used.has(k)&&typeof v==='string'&&(()=>{const t=norm(v);return t===nm||t===full||t.endsWith(' - '+nm)})());
+  if(i<0)i=lv.findIndex((v,k)=>!used.has(k)&&typeof v==='string'&&norm(v).includes(nm));
+  if(i<0)return;used.add(i);const nums=[];
+  for(let j=i+1;j<Math.min(lv.length,i+8);j++){const v=lv[j];if(isLbl(v))break;if(isNum(v))nums.push(typeof v==='number'?v:money(v))}
+  if(!nums.length)return;
+  let x=tb&&nums.length>=2?nums[0]-nums[1]:nums[0];
+  if(sheet&&(a.card||/credit card/i.test(a.name)))x=-Math.abs(x);
+  a.actual=x;n++});
+ return n}
+async function loadBalances(rows){
+ let d;try{d=await askRaw('/api4/reports',4000)}catch(e){log('GET /api4/reports -> '+e.message);return false}
+ const lk=(d.body&&d.body._links)||{};
+ for(const k of ['trialBalance','generalLedgerSummary','balanceSheet','bankAccountSummary','balanceSheetByGroup','receiptsAndPaymentsSummary']){
+  const h=href(lk[k]);if(!h){log(k+': not offered by Manager');continue}
+  const qs=h.includes('?')?'?'+h.split('?')[1]:'',P=h.split('?')[0].replace(/-batch$/,'');
+  let items=[];try{const x=await askRaw(h,4000);items=toArr(x.body)}catch(e){log(k+': list failed - '+e.message);continue}
+  log(k+': '+items.length+' saved report(s)');
+  const q=[];
+  items.forEach(i=>{const it=i.item||i;const K=it.key||it.id;
+   Object.values(i._links||{}).forEach(b=>{const u=href(b);if(u&&/view|result/i.test(u))q.push(u)});
+   if(K){q.push(P+'-view/'+K+qs);q.push(P+'-view'+(qs?qs+'&':'?')+'key='+K);q.push(P+'/'+K+qs)}});
+  q.push(P+'-view'+qs);
+  const tried=new Set();
+  while(q.length&&tried.size<10){const u=q.shift();if(tried.has(u))continue;tried.add(u);
+   try{const y=await askRaw(u,5000),b=y.body||{},rw=Array.isArray(b.rows)?b.rows:[];
+    log('  '+u.slice(0,80)+' -> '+y.status+' rows='+rw.length);
+    if(rw.length){log('  report: '+short([b.title,b.subtitles],120));const n=matchBalances(rows,rw,k);if(!n)log('  raw rows: '+short(rw,900));
+     if(n>=1){rows.asAt=(b.subtitles||[]).join(' · ');if(n<rows.length)log('  raw rows: '+short(rw,1500));log('  matched '+n+' of '+rows.length+' accounts from '+k+' ('+rows.asAt+'). Accounts not listed by Manager are treated as 0.');return true}
+     log('  only '+n+' accounts matched, trying next')}
+    Object.values(b._links||{}).forEach(l=>{const x=href(l);if(x&&/view|result/i.test(x)&&!tried.has(x))q.push(x)})
+   }catch(e){log('  '+u.slice(0,60)+' -> '+e.message)}}}
+ return false}
+async function exploreReports(){
+ let d;try{d=await askRaw('/api4/reports',4000)}catch(e){log('GET /api4/reports -> '+e.message);return}
+ const lk=(d.body&&d.body._links)||{};const keys=Object.keys(lk).filter(k=>k!=='self'&&k!=='describedBy');
+ log('GET /api4/reports -> '+d.status+'; report types: '+keys.join(', '));
+ let n=0;
+ for(const k of keys){if(!/balance|profit|income|cash|receiv|payab|trial|statement/i.test(k))continue;if(n++>=9)break;
+  const h=href(lk[k]);if(!h)continue;
+  try{const x=await askRaw(h,4000);const arr=toArr(x.body);
+   log('LIST '+k+' '+h.slice(0,60)+' -> '+x.status+(arr.length?', '+arr.length+' saved':': '+short(x.error||x.body,200)));
+   if(arr.length){const f=arr[0],fl=f._links||{};
+    log('  first: '+short(nz(f.item||f),160)+' | links: '+Object.entries(fl).map(([a,b])=>a+'='+href(b).slice(0,70)).join(' ; '));
+    const urls=[];const self=href(fl.self);
+    for(const [a,b]of Object.entries(fl)){const u=href(b);if(u&&a!=='describedBy'&&a!=='self'&&/view|result|data|report/i.test(a+u))urls.push(u)}
+    if(self){urls.push(self.includes('?')?self.replace('?','-view?'):self+'-view')}
+    for(const u of Array.from(new Set(urls)).slice(0,3)){try{const y=await askRaw(u,5000);log('  VIEW '+u.slice(0,70)+' -> '+y.status+': '+short(y.error||y.body,420))}catch(e){log('  VIEW '+u.slice(0,50)+' -> '+e.message)}}}
+  }catch(e){log('LIST '+k+' -> '+e.message)}}
+ if(!n)log('No balance/profit/cash/receivable report types found in /api4/reports.')}
+$('connect').onclick=tryLive;
+$('clearlog').onclick=()=>{$('diag').textContent=''};
+$('copylog').onclick=()=>{const t=document.createElement('textarea');t.value=$('diag').textContent;document.body.appendChild(t);t.select();let ok=false;try{ok=document.execCommand('copy')}catch(e){}t.remove();$('copylog').textContent=ok?'Copied':'Select the log text and press Ctrl+C'};
+/* quick import from Manager screens (Copy to clipboard) */
+$('importBank').onclick=()=>{const t=parseTable($('pasteBank').value);const m=$('bankMsg');
+ if(!t){m.textContent='Could not find a header row with “Name”. In Manager click Copy to clipboard on the Bank and Cash Accounts screen and paste everything.';return}
+ const ni=t.col(/^name$/i),ci=t.col(/control/i),ai=t.col(/actual balance/i)>=0?t.col(/actual balance/i):t.col(/cleared balance/i),vi=t.col(/available/i);
+ if(ni<0||ai<0){m.textContent='Missing Name or balance column.';return}
+ const list=t.data.map(r=>({name:r[ni]||'',ctrl:ci>=0?r[ci]||'':'',actual:money(r[ai]),avail:vi>=0&&r[vi]?money(r[vi]):null})).filter(a=>a.name);
+ m.textContent=applyAccounts(list)?'Imported '+list.length+' accounts: '+D.cash.length+' bank/cash, '+D.cards.length+' credit cards.':'Nothing imported.'};
+$('importCust').onclick=()=>{const t=parseTable($('pasteCust').value);const m=$('custMsg');
+ if(!t){m.textContent='Could not find a header row with “Name”. Use Copy to clipboard on the Customers screen.';return}
+ const ni=t.col(/^name$/i);let ai=t.col(/actual balance/i);if(ai<0)ai=t.col(/balance|outstanding|amount/i);
+ if(ni<0||ai<0){m.textContent='Missing Name or Balance column.';return}
+ const list=t.data.map(r=>({name:r[ni]||'',amount:money(r[ai])})).filter(a=>a.name&&a.amount);
+ const prev=D.recv;D.recv=list.map(a=>({name:a.name,amount:a.amount,due:(prev.find(p=>p.name===a.name)||{}).due||''}));buildEditor();render();m.textContent='Imported '+D.recv.length+' customers with balances.'};
+if(inManager()){log('Inside Manager. Starting live read…');setTimeout(tryLive,600)}else{log('Opened outside Manager. Live read only works from the Manager button.')}
+buildEditor();render();
+addEventListener('resize',()=>render());
+</script></body></html>
