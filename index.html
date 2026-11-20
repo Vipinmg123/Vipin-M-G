@@ -30,7 +30,7 @@ button.s{background:#e9eefb;color:#173b91}button.x{background:transparent;color:
 .note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:10px}
 @media(max-width:850px){.row{grid-template-columns:1fr}}
 </style></head><body>
-<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · build v13 · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
+<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · build v16 · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
 <main>
 <section class="kpis" id="kpis"></section>
 
@@ -190,7 +190,7 @@ async function tryLive2(){
  for(const q of ['',bq?'?business='+encodeURIComponent(bq):null]){if(q===null)continue;
   try{const d=await askRaw('/api4/bank-or-cash-account-batch'+q);const arr=toArr(d.body);log('GET bank-or-cash-account-batch'+(q?' (business)':'')+' -> '+d.status+(arr.length?', '+arr.length+' accounts':': '+short(d.error||d.body,120)));if(arr.length){L={arr,body:d.body};break}}catch(e){log('GET bank-or-cash-account-batch -> '+e.message)}}
  if(!L){$('status').textContent='Live read failed. Use the quick import under Update figures';log('Could not list accounts.');return}
- const rows=fromApi(L.arr);log('Account fields: '+short(nz(L.arr[0].item||L.arr[0]),420));
+ const rows=fromApi(L.arr);try{log('Account links: '+Object.keys(L.arr[0]._links||{}).join(', ')+' | '+short(Object.entries(L.arr[0]._links||{}).map(([a,b])=>a+'='+href(b)),400))}catch(e){}log('Account fields: '+short(nz(L.arr[0].item||L.arr[0]),420));
  log('Accounts: '+rows.map(r=>r.code+' '+r.name+(r.card?' [card, limit '+r.lim+']':'')).join('; '));
  if(rows.some(r=>r.actual!=null)){rows.forEach(r=>{if(r.actual==null)r.actual=0});applyAccounts(rows);$('status').textContent='Live: '+rows.length+' accounts with balances ('+new Date().toTimeString().slice(0,5)+')';return}
  rows.forEach(r=>{if(!r.name)return;const card=r.card||/credit card/i.test(r.name);const lst=card?D.cards:D.cash;const ex=lst.find(x=>x.name===r.name);
@@ -220,6 +220,14 @@ function matchBalances(rows,rws,kind){let n=0;const used=new Set();
   let x=tb&&vs.length>=2?vs[0]-vs[1]:vs[0];
   if(sheet&&isCard(a))x=-Math.abs(x);
   a.actual=x;used.add(a);n++});
+ walkNodes(rws,nd=>{const nmv=nd.name||nd.displayName;if(typeof nmv!=='string'||!Array.isArray(nd.cells)||!nd.cells.length)return;
+  const t=norm(nmv);
+  const c=rows.filter(r=>!used.has(r)&&r.name&&((r.code&&(t===r.code.toLowerCase()||t.startsWith(r.code.toLowerCase()+' ')||t.includes('('+r.code.toLowerCase()+')')))||t.includes(r.name.toLowerCase()))).sort((p,q)=>q.name.length-p.name.length);
+  const a=c[0];if(!a)return;
+  const vs=nd.cells.map(cl=>cl&&typeof cl.value==='number'?cl.value:(cl&&cl.text?money(cl.text):0));
+  let x=tb&&vs.length>=2?vs[0]-vs[1]:vs[0];
+  if(sheet&&isCard(a))x=-Math.abs(x);
+  a.actual=x;used.add(a);n++});
  if(n)return n;
  const lv=leaves(rws);
  const isLbl=v=>typeof v==='string'&&/[a-z]/i.test(v);const isNum=v=>typeof v==='number'||(typeof v==='string'&&MONEYRE.test(v.trim())&&/\d/.test(v));
@@ -236,6 +244,12 @@ function matchBalances(rows,rws,kind){let n=0;const used=new Set();
 async function probeDiag(){
  try{const r=await askRaw('/api4',4000);const lk=(r.body&&r.body._links)||{};log('API root links: '+Object.keys(lk).join(', ').slice(0,1800))}catch(e){log('GET /api4 -> '+e.message)}
  const qs=window.__qs||'';
+ for(const p of ['bank-and-cash-accounts','bank-or-cash-account-balance','bank-and-cash-account','bank-or-cash-account-summary','bank-or-cash-account-view']){
+  for(const sfx of ['-batch','','-view']){try{const x=await askRaw('/api4/'+p+sfx+qs,4000),it=toArr(x.body);log('PROBE2 '+p+sfx+' -> '+x.status+', '+it.length+' items');if(x.status===200)log('  body: '+short(x.body,500))}catch(e){}}}
+ for(const p of ['receipt','payment','inter-account-transfer','opening-balance','journal-entry']){
+  try{const x=await askRaw('/api4/'+p+'-batch'+qs,5000),it=toArr(x.body);log('PROBE '+p+'-batch -> '+x.status+', '+it.length+' items');if(it[0])log('  first: '+short(it[0],600))}
+  catch(e){log('PROBE '+p+'-batch -> '+e.message)}}
+ return;
  for(const p of ['receipt','payment','inter-account-transfer','opening-balance','journal-entry']){
   try{const x=await askRaw('/api4/'+p+'-batch'+qs,5000),it=toArr(x.body);log('PROBE '+p+'-batch -> '+x.status+', '+it.length+' items');if(it[0])log('  first: '+short(it[0],600))}
   catch(e){log('PROBE '+p+'-batch -> '+e.message)}}
@@ -293,11 +307,11 @@ $('importBank').onclick=()=>{const t=parseTable($('pasteBank').value);const m=$(
  m.textContent=applyAccounts(list)?'Imported '+list.length+' accounts: '+D.cash.length+' bank/cash, '+D.cards.length+' credit cards.':'Nothing imported.'};
 $('importCust').onclick=()=>{const t=parseTable($('pasteCust').value);const m=$('custMsg');
  if(!t){m.textContent='Could not find a header row with “Name”. Use Copy to clipboard on the Customers screen.';return}
- const ni=t.col(/^name$/i);let ai=t.col(/actual balance/i);if(ai<0)ai=t.col(/balance|outstanding|amount/i);
+ const ni=t.col(/^name$/i);let ai=t.col(/actual balance/i);if(ai<0)ai=t.col(/balance|outstanding|amount|receivable|due/i);
  if(ni<0||ai<0){m.textContent='Missing Name or Balance column.';return}
  const list=t.data.map(r=>({name:r[ni]||'',amount:money(r[ai])})).filter(a=>a.name&&a.amount);
  const prev=D.recv;D.recv=list.map(a=>({name:a.name,amount:a.amount,due:(prev.find(p=>p.name===a.name)||{}).due||''}));buildEditor();render();m.textContent='Imported '+D.recv.length+' customers with balances.'};
-if(inManager()){log('Inside Manager (build v13). Starting live read…');setTimeout(tryLive,600)}else{log('Opened outside Manager. Live read only works from the Manager button.')}
+if(inManager()){log('Inside Manager (build v16). Starting live read…');setTimeout(tryLive,600)}else{log('Opened outside Manager. Live read only works from the Manager button.')}
 buildEditor();render();
 addEventListener('resize',()=>render());
 </script></body></html>
