@@ -30,7 +30,7 @@ button.s{background:#e9eefb;color:#173b91}button.x{background:transparent;color:
 .note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:10px}
 @media(max-width:850px){.row{grid-template-columns:1fr}}
 </style></head><body>
-<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · build v5 · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
+<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · build v6 · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
 <main>
 <section class="kpis" id="kpis"></section>
 
@@ -176,10 +176,10 @@ function toArr(b){if(Array.isArray(b))return b;if(b&&typeof b==='object'){for(co
 const num=(o,keys)=>{for(const k of keys)if(o[k]!=null&&o[k]!==''&&isFinite(Number(o[k])))return Number(o[k]);return null};
 const href=l=>l&&(l.href||(l[0]&&l[0].href))||'';
 const nz=o=>{const r={};for(const k of Object.keys(o||{})){const v=o[k];if(v==null||v===false||v===0||v===''||/^obsolete/i.test(k)||k==='customFields'||k==='customFields2')continue;r[k]=v}return r};
-function deepFind(o,re,d){d=d||0;if(!o||typeof o!=='object'||d>4)return null;for(const k of Object.keys(o)){if(k==='_links'||k==='_actions')continue;const v=o[k];if(re.test(k)&&v!=null&&v!==''&&typeof v!=='object'&&isFinite(Number(v)))return Number(v);if(v&&typeof v==='object'){const r=deepFind(v,re,d+1);if(r!=null)return r}}return null}
+function deepFind(o,re,d){d=d||0;if(!o||typeof o!=='object'||d>4)return null;for(const k of Object.keys(o)){if(k==='_links'||k==='_actions'||/^obsolete/i.test(k))continue;const v=o[k];if(re.test(k)&&v!=null&&v!==''&&typeof v!=='object'&&isFinite(Number(v)))return Number(v);if(v&&typeof v==='object'){const r=deepFind(v,re,d+1);if(r!=null)return r}}return null}
 function fromApi(arr){return arr.map(a=>{const it=a.item||a,c=it.controlAccount;
- const act=deepFind(a,/^actualbalance$/i);const bal=act!=null?act:(deepFind(a,/^balance$/i)!=null?deepFind(a,/^balance$/i):deepFind(a,/balance/i));
- return{name:it.name||it.Name||it.title||'',code:it.code||'',ctrl:typeof c==='string'?c:(c&&c.name)||'',actual:bal,avail:deepFind(a,/available/i),card:!!it.hasCreditLimit,lim:it.hasCreditLimit?(Number(it.creditLimit)||0):null}})}
+ const bal=[/^actualbalance$/i,/^clearedbalance$/i,/^balance$/i].map(re=>deepFind(a,re)).find(v=>v!=null);
+ return{name:it.name||it.Name||it.title||'',code:it.code||'',ctrl:typeof c==='string'?c:(c&&c.name)||'',actual:bal,avail:deepFind(a,/^availablecredit$/i),card:!!it.hasCreditLimit,lim:it.hasCreditLimit?(Number(it.creditLimit)||0):null}})}
 let busy=false;
 async function tryLive(){if(busy)return;busy=true;try{await tryLive2()}finally{busy=false}}
 async function tryLive2(){
