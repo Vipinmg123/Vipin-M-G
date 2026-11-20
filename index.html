@@ -60,7 +60,7 @@ button.s{background:#e9eefb;color:#173b91}button.x{background:transparent;color:
 <p class="note">2) For receivables open <b>Customers</b>, click <b>Copy to clipboard</b>, paste below.</p>
 <textarea id="pasteCust" rows="3" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:6px" placeholder="Paste Customers table here"></textarea>
 <div class="tools"><button id="importCust">Import receivables</button><span id="custMsg" class="note"></span></div></div>
-<div class="card" style="margin-top:12px"><h2>Live connection log</h2><pre id="diag" style="white-space:pre-wrap;font-size:12px;background:#f0f3f9;border-radius:8px;padding:10px;margin:0;max-height:200px;overflow:auto"></pre><p class="note">Shows what Manager sent to this page. No token or balances are shown.</p></div>
+<div class="card" style="margin-top:12px"><h2>Live connection log</h2><pre id="diag" style="white-space:pre-wrap;font-size:12px;background:#f0f3f9;border-radius:8px;padding:10px;margin:0;max-height:320px;overflow:auto"></pre><p class="note">Shows what Manager sent to this page. No token is shown.</p></div>
 <div class="ed" id="editor"></div></details>
 <p class="note">Privacy: figures stay in this browser's local storage. Do not use on a shared profile. Always confirm figures against Manager's own reports.</p>
 </main>
@@ -148,13 +148,14 @@ let armed=false;$('clear').onclick=()=>{if(!armed){armed=true;$('clear').textCon
 /* ---- Manager link: live read + quick import ---- */
 const MGR={endpoint:null,token:null};let seen=0;
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-function log(m){const el=$('diag');if(!el)return;const t=new Date().toTimeString().slice(0,8);el.textContent=(el.textContent+t+'  '+m+'\n').split('\n').slice(-60).join('\n')}
+function log(m){const el=$('diag');if(!el)return;const t=new Date().toTimeString().slice(0,8);el.textContent=(el.textContent+t+'  '+m+'\n').split('\n').slice(-150).join('\n')}
 function scan(o,d){d=d||0;if(!o||typeof o!=='object'||d>4)return;for(const k of Object.keys(o)){const v=o[k];if(typeof v==='string'){if(/token|apikey|api_key|authorization/i.test(k)&&!MGR.token)MGR.token=v.replace(/^Bearer\s+/i,'');if(/endpoint|apiurl|api_url|baseurl|base_url|^api$/i.test(k)&&/^(https?:\/\/|\/)/.test(v)&&!MGR.endpoint)MGR.endpoint=v}else scan(v,d+1)}}
 function inManager(){try{return parent!==window}catch(e){return false}}
 addEventListener('message',e=>{if(!inManager()||e.source!==parent)return;let d=e.data;if(typeof d==='string'){try{d=JSON.parse(d)}catch(x){return}}
- if(d&&typeof d==='object'){scan(d);if(seen++<15)log('Manager sent: type='+(d.type||'?')+' keys='+Object.keys(d).join(','))}});
-function ask(path,ms){return new Promise((res,rej)=>{const id=String(Date.now())+Math.random();const t=setTimeout(()=>{removeEventListener('message',f);rej(Error('no reply'))},ms);
- function f(e){const d=e.data;if(d&&typeof d==='object'&&/api-(request-)?response/.test(d.type||'')&&(!d.requestId||d.requestId===id)){clearTimeout(t);removeEventListener('message',f);res('body' in d?d.body:d)}}
+ if(d&&typeof d==='object'){scan(d);if(d.type==='page-response')MGR.page=d.body;if(seen++<15)log('Manager sent: type='+(d.type||'?')+' keys='+Object.keys(d).join(','))}});
+const short=(x,n)=>{let s;try{s=typeof x==='string'?x:JSON.stringify(x)}catch(e){s=String(x)}return(s||'').replace(/\s+/g,' ').slice(0,n||170)};
+function askRaw(path,ms){return new Promise((res,rej)=>{const id=String(Date.now())+Math.random();const t=setTimeout(()=>{removeEventListener('message',f);rej(Error('no reply'))},ms||3500);
+ function f(e){const d=e.data;if(d&&typeof d==='object'&&/api-(request-)?response/.test(d.type||'')&&(!d.requestId||d.requestId===id)){clearTimeout(t);removeEventListener('message',f);res(d)}}
  addEventListener('message',f);parent.postMessage({type:'api-request',method:'GET',path,requestId:id},'*')})}
 /* money text such as "- ₹ 8,205.69" or "₹ 13,425.37" -> number */
 function money(s){s=String(s==null?'':s).trim();if(!s)return 0;const neg=/^[-−(]/.test(s)||/[-−]\s*₹/.test(s)||/₹\s*[-−]/.test(s);const n=parseFloat(s.replace(/[^0-9.]/g,''));return isFinite(n)?(neg?-n:n):0}
@@ -178,13 +179,23 @@ function fromApi(arr){return arr.map(a=>({name:a.name||a.Name||a.title||'',ctrl:
 async function tryLive(){
  if(!inManager()){$('status').textContent='Open this page from the Manager button to read live data';log('Page is not inside Manager.');return}
  $('status').textContent='Connecting to Manager…';log('Requesting page context…');try{parent.postMessage({type:'page-request'},'*')}catch(e){}
- await sleep(700);log('API endpoint '+(MGR.endpoint?'received':'not received')+' · token '+(MGR.token?'received':'not received'));
- const paths=['bank-and-cash-accounts','bank-or-cash-accounts','bank-or-cash-account'];let rows=null;
- for(const p of paths){try{const b=await ask('/api4/'+p,3000),arr=toArr(b);log('message /api4/'+p+' -> '+(arr.length?arr.length+' item(s)':'reply without a list ('+(b&&typeof b==='object'?Object.keys(b).slice(0,6).join(','):typeof b)+')'));if(arr.length){log('item keys: '+Object.keys(arr[0]).join(','));rows=fromApi(arr);break}}catch(e){log('message /api4/'+p+' -> '+e.message)}}
- if(!rows&&MGR.endpoint&&MGR.token){let base=MGR.endpoint.replace(/\/+$/,'');if(!/api4/i.test(base))base+='/api4';
-  for(const p of paths){try{const r=await fetch(base+'/'+p,{headers:{Authorization:'Bearer '+MGR.token}});log('fetch '+p+' -> HTTP '+r.status);if(r.ok){const arr=toArr(await r.json());if(arr.length){log('item keys: '+Object.keys(arr[0]).join(','));rows=fromApi(arr);break}}}catch(e){log('fetch '+p+' -> '+e.message)}}}
+ await sleep(600);if(MGR.page)log('Page context: '+short(MGR.page,220));
+ let biz=null;
+ try{const d=await askRaw('/api4/businesses');log('GET /api4/businesses -> status '+d.status+': '+short(d.error||d.body,220));
+  const arr=toArr(d.body).length?toArr(d.body):(d.body&&d.body.businesses)||[];
+  if(arr.length){biz=arr.find(b=>/personal\s*finance/i.test(b.name||b.Name||''))||arr[0];log('Using business: '+(biz.name||biz.Name||short(biz,60)))}}catch(e){log('GET /api4/businesses -> '+e.message)}
+ const bn=biz&&(biz.name||biz.Name),bk=biz&&(biz.key||biz.Key||biz.id||biz.uuid);
+ const names=['bank-or-cash-account-batch','bank-account-batch','bank-or-cash-account','bank-and-cash-accounts','bank-or-cash-accounts','bank-account','bank-accounts','cash-account-batch'];
+ const qs=[''];if(bn)qs.push('?business='+encodeURIComponent(bn));if(bk)qs.push('?business='+encodeURIComponent(bk));
+ let rows=null;
+ outer:for(const n of names)for(const q of qs){const p='/api4/'+n+q;
+  try{const d=await askRaw(p,3000);const arr=toArr(d.body);
+   log('GET '+n+(q?' +business':'')+' -> '+d.status+(arr.length?' list of '+arr.length:' '+short(d.error||d.body,110)));
+   if(arr.length){log('item keys: '+Object.keys(arr[0]).join(','));rows=fromApi(arr);if(rows.some(r=>r.actual!=null))break outer}}
+  catch(e){log('GET '+n+' -> '+e.message)}}
  if(rows&&rows.some(r=>r.actual!=null)){rows.forEach(r=>{if(r.actual==null)r.actual=0});applyAccounts(rows);$('status').textContent='Live: '+rows.length+' accounts read from Manager ('+new Date().toTimeString().slice(0,5)+')';return}
- $('status').textContent='Live read not available. Use the quick import under Update figures';log('No usable balances from Manager. Use Quick import.')}
+ if(rows)log('Accounts found but no balance fields. Use Quick import for balances.');
+ $('status').textContent='Live balances not available. Use the quick import under Update figures';log('No usable balances from Manager. Use Quick import.')}
 $('connect').onclick=tryLive;
 /* quick import from Manager screens (Copy to clipboard) */
 $('importBank').onclick=()=>{const t=parseTable($('pasteBank').value);const m=$('bankMsg');
