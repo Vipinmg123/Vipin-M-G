@@ -30,7 +30,7 @@ button.s{background:#e9eefb;color:#173b91}button.x{background:transparent;color:
 .note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:10px}
 @media(max-width:850px){.row{grid-template-columns:1fr}}
 </style></head><body>
-<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · build v6 · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
+<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · build v7 · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
 <main>
 <section class="kpis" id="kpis"></section>
 
@@ -200,15 +200,21 @@ async function tryLive2(){
  $('status').textContent='Live: '+rows.length+' accounts and card limits read. Balances: use quick import';log('Balances are not part of the account list. See report discovery above.')}
 async function exploreReports(){
  let d;try{d=await askRaw('/api4/reports',4000)}catch(e){log('GET /api4/reports -> '+e.message);return}
- const arr=toArr(d.body);log('GET /api4/reports -> '+d.status+(arr.length?', '+arr.length+' entries':': '+short(d.error||d.body,200)));
- if(!arr.length)return;
- log('Report entries: '+arr.slice(0,30).map(r=>short(nz(r.item||r),70)+' '+href(r._links&&r._links.self).slice(0,50)).join(' || '));
- let tried=0;
- for(const r of arr){const it=r.item||r,self=href(r._links&&r._links.self),nm=String(it.name||it.title||it.type||'');
-  if(!self||tried>=8||!/balance sheet|profit|trial|receivable|cash ?flow|credit|bank/i.test(nm+self))continue;tried++;
-  const v=self.includes('?')?self.replace('?','-view?'):self+'-view';
-  try{const x=await askRaw(v,4000);log('VIEW '+nm.slice(0,30)+' '+v.slice(0,70)+' -> '+x.status+': '+short(x.error||x.body,260))}catch(e){log('VIEW '+nm.slice(0,30)+' -> '+e.message)}}
- if(!tried)log('No report entries matched balance sheet / profit / trial / receivable / cash flow.')}
+ const lk=(d.body&&d.body._links)||{};const keys=Object.keys(lk).filter(k=>k!=='self'&&k!=='describedBy');
+ log('GET /api4/reports -> '+d.status+'; report types: '+keys.join(', '));
+ let n=0;
+ for(const k of keys){if(!/balance|profit|income|cash|receiv|payab|trial|statement/i.test(k))continue;if(n++>=9)break;
+  const h=href(lk[k]);if(!h)continue;
+  try{const x=await askRaw(h,4000);const arr=toArr(x.body);
+   log('LIST '+k+' '+h.slice(0,60)+' -> '+x.status+(arr.length?', '+arr.length+' saved':': '+short(x.error||x.body,200)));
+   if(arr.length){const f=arr[0],fl=f._links||{};
+    log('  first: '+short(nz(f.item||f),160)+' | links: '+Object.entries(fl).map(([a,b])=>a+'='+href(b).slice(0,70)).join(' ; '));
+    const urls=[];const self=href(fl.self);
+    for(const [a,b]of Object.entries(fl)){const u=href(b);if(u&&a!=='describedBy'&&a!=='self'&&/view|result|data|report/i.test(a+u))urls.push(u)}
+    if(self){urls.push(self.includes('?')?self.replace('?','-view?'):self+'-view')}
+    for(const u of Array.from(new Set(urls)).slice(0,3)){try{const y=await askRaw(u,5000);log('  VIEW '+u.slice(0,70)+' -> '+y.status+': '+short(y.error||y.body,420))}catch(e){log('  VIEW '+u.slice(0,50)+' -> '+e.message)}}}
+  }catch(e){log('LIST '+k+' -> '+e.message)}}
+ if(!n)log('No balance/profit/cash/receivable report types found in /api4/reports.')}
 $('connect').onclick=tryLive;
 $('copylog').onclick=()=>{const t=document.createElement('textarea');t.value=$('diag').textContent;document.body.appendChild(t);t.select();let ok=false;try{ok=document.execCommand('copy')}catch(e){}t.remove();$('copylog').textContent=ok?'Copied':'Select the log text and press Ctrl+C'};
 /* quick import from Manager screens (Copy to clipboard) */
