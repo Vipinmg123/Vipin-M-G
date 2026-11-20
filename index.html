@@ -2,206 +2,158 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Personal Finance ERP</title>
 <style>
-:root{--bg:#f4f6fa;--card:#fff;--ink:#172033;--muted:#667085;--line:#e5e9f0;--accent:#2457d6;--good:#17663b;--bad:#b42318}
+:root{--bg:#f4f6fa;--card:#fff;--ink:#172033;--muted:#667085;--line:#e5e9f0;--accent:#2457d6;--good:#17663b;--bad:#b42318;--warn:#8a5a00}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px system-ui,Segoe UI,Arial}
-header{background:#15233c;color:#fff;padding:22px 26px}header h1{margin:0 0 5px;font-size:22px}header p{margin:0;color:#cbd5e1}
-main{padding:22px;max-width:1400px;margin:auto}
-.grid{display:grid;grid-template-columns:repeat(4,minmax(150px,1fr));gap:14px;margin-bottom:14px}
+header{background:#15233c;color:#fff;padding:18px 24px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px}
+header h1{margin:0;font-size:20px}header p{margin:2px 0 0;color:#cbd5e1;font-size:13px}
+#status{font-size:12px;color:#cbd5e1}
+main{padding:18px;max-width:1400px;margin:auto}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;box-shadow:0 2px 8px #15233c08}
-.metric{font-size:22px;font-weight:700;margin-top:8px}.muted{color:var(--muted)}
-.row{display:grid;grid-template-columns:1.4fr 1fr;gap:14px;margin-top:14px}.row2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
-h2{font-size:16px;margin:0 0 12px}.toolbar{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;align-items:center}
-button,label.file{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:9px 13px;cursor:pointer;font-weight:600}
-button.secondary{background:#e9eefb;color:#173b91}input[type=file]{display:none}
-select,input[type=month]{padding:8px;border:1px solid var(--line);border-radius:7px;background:#fff}
-table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:600}
-td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.k{color:var(--muted);font-size:12px}.v{font-size:22px;font-weight:700;margin-top:6px;font-variant-numeric:tabular-nums}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}
+h2{font-size:15px;margin:0 0 10px}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}th{color:var(--muted);font-weight:600;font-size:12px}
+.n{text-align:right;font-variant-numeric:tabular-nums}
 tr.grp td{background:#f0f3f9;font-weight:700}tr.tot td{font-weight:700;border-top:2px solid var(--line)}tr.big td{font-weight:800;background:#e9eefb}
-.pos{color:var(--good)}.neg{color:var(--bad)}
-canvas{width:100%;height:230px}.note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:12px}
-.status{padding:8px 10px;background:#edf7f0;color:#17663b;border-radius:8px;display:inline-block}
-.warn{background:#fff6e5;color:#8a5a00}
-details summary{cursor:pointer;font-weight:600}
-@media(max-width:850px){.grid{grid-template-columns:repeat(2,1fr)}.row,.row2{grid-template-columns:1fr}}@media(max-width:480px){.grid{grid-template-columns:1fr}}
+.pos{color:var(--good)}.neg{color:var(--bad)}.warn{color:var(--warn)}.muted{color:var(--muted)}
+canvas{width:100%;height:230px;display:block}
+.bar{height:8px;background:#e9eefb;border-radius:6px;overflow:hidden;min-width:80px}.bar i{display:block;height:100%;background:var(--accent)}.bar i.hi{background:var(--bad)}
+.empty{color:var(--muted);padding:6px 0}
+.chips{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}.chip{background:#f0f3f9;border-radius:8px;padding:5px 9px;font-size:12px}
+details{margin-top:14px}summary{cursor:pointer;font-weight:700;padding:12px 16px;background:var(--card);border:1px solid var(--line);border-radius:12px}
+.ed{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px;margin-top:12px}
+.ed input,.ed select{width:100%;padding:6px;border:1px solid var(--line);border-radius:6px;background:#fff;font:inherit}
+button{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:7px 12px;cursor:pointer;font-weight:600;font:inherit;font-weight:600}
+button.s{background:#e9eefb;color:#173b91}button.x{background:transparent;color:var(--bad);padding:4px 8px}
+.tools{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px;align-items:center}
+.note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:10px}
+@media(max-width:850px){.row{grid-template-columns:1fr}}
 </style></head><body>
-<header><h1>Personal Finance ERP</h1><p>Manager.io companion dashboard · mapped to your chart of accounts · INR ₹</p></header>
+<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
 <main>
-<div class="toolbar">
-<label class="file">Import transactions CSV<input id="csvFile" type="file" accept=".csv,text/csv"></label>
-<button class="secondary" id="sample">Load sample data</button>
-<button class="secondary" id="template">Download CSV template</button>
-<button class="secondary" id="export">Export data</button>
-<label>Month: <select id="period"></select></label>
-<button class="secondary" id="refresh" title="Experimental, only works if Manager exposes the extension API">Refresh Manager bank accounts (experimental)</button>
-<span id="status" class="status">Ready: import a CSV to begin</span>
-</div>
+<section class="kpis" id="kpis"></section>
 
-<section class="grid">
-<div class="card"><div class="muted">Total income</div><div id="mIncome" class="metric">₹0</div></div>
-<div class="card"><div class="muted">Gross profit</div><div id="mGross" class="metric">₹0</div></div>
-<div class="card"><div class="muted">Total expenses (incl. operating &amp; finance)</div><div id="mExp" class="metric">₹0</div></div>
-<div class="card"><div class="muted">Net profit (loss)</div><div id="mNet" class="metric">₹0</div></div>
-</section>
-<section class="grid">
-<div class="card"><div class="muted">Loan &amp; credit card repayments</div><div id="mDebt" class="metric">₹0</div></div>
-<div class="card"><div class="muted">Invested (Investments, net)</div><div id="mInv" class="metric">₹0</div></div>
-<div class="card"><div class="muted">Net cash movement</div><div id="mCash" class="metric">₹0</div></div>
-<div class="card"><div class="muted">Transactions / unmapped</div><div id="mCount" class="metric">0</div></div>
+<section class="row">
+<div class="card"><h2>Cash positions</h2><div id="cash"></div></div>
+<div class="card"><h2>Cash flow</h2><canvas id="cfChart"></canvas><div id="cf"></div></div>
 </section>
 
 <section class="row">
-<div class="card"><h2>Monthly income vs expenses</h2><canvas id="monthly" width="900" height="260"></canvas></div>
-<div class="card"><h2>Top expense accounts</h2><canvas id="category" width="600" height="260"></canvas></div>
-</section>
-
-<section class="row2">
-<div class="card"><h2>Profit &amp; loss (selected month)</h2><div id="pl"></div></div>
-<div class="card"><h2>Balance sheet movement (selected month)</h2><div id="bs"></div>
-<p class="note">Movement only: it shows how each asset/liability/equity account changed in the period from your CSV. It is not a closing balance. Use Manager's Balance Sheet for real balances.</p></div>
+<div class="card"><h2>Profit &amp; loss position</h2><div id="pl"></div></div>
+<div class="card"><h2>Balance sheet position</h2><div id="bs"></div></div>
 </section>
 
 <section class="row">
-<div class="card"><h2>Manager.io bank / cash accounts</h2><div id="accounts" class="muted">Experimental. Needs a Manager version that exposes an extension API to the page. Otherwise rely on CSV import.</div></div>
-<div class="card"><h2>Unmapped accounts</h2><div id="unmapped" class="muted">None</div>
-<p class="note">Account names in your CSV must match your Manager chart of accounts (case-insensitive). Unmapped rows are classified by the <b>type</b> column only.</p></div>
+<div class="card"><h2>Receivables</h2><div id="recv"></div></div>
+<div class="card"><h2>Credit card outstanding</h2><div id="cards"></div></div>
 </section>
 
-<section class="card" style="margin-top:14px"><h2>Latest transactions</h2><div style="overflow:auto"><table><thead><tr><th>Date</th><th>Description</th><th>Ledger account</th><th>Section</th><th>Dir</th><th class="n">Amount</th><th>Bank / cash</th></tr></thead><tbody id="transactions"><tr><td colspan="7" class="muted">Import a CSV to begin.</td></tr></tbody></table></div></section>
-
-<section class="card" style="margin-top:14px"><details><summary>Chart of accounts used for mapping</summary><div id="coaRef" class="note"></div></details></section>
-
-<p class="note">CSV columns: <b>date, description, account, direction, amount, bank</b>. <b>account</b> = a ledger account from your chart (e.g. Groceries, Utilities, Investments, HDFC Credit Card EMI). <b>direction</b> = <b>in</b> (money into the bank/cash) or <b>out</b> (money leaving). Dates: YYYY-MM-DD or DD-MM-YYYY. Older files with <b>category</b> and <b>type</b> columns still import.<br>Privacy: data is processed in this browser and kept in its local storage. Do not use on a shared profile.</p>
+<details id="edit"><summary>Update figures</summary>
+<div class="card" style="margin-top:12px"><div style="max-width:320px"><label class="k">Period label (e.g. Nov 2026)</label><br><input id="period" style="width:100%;padding:7px;border:1px solid var(--line);border-radius:6px"></div>
+<p class="note">Enter your closing balances from Manager's reports (Bank and Cash Accounts, Profit and Loss Statement, Balance Sheet, Aged Receivables, credit card accounts). Figures are saved in this browser only. Dashboard updates as you type.</p>
+<div class="tools"><button class="s" id="example">Load example figures</button><button class="s" id="clear">Clear all figures</button><button class="s" id="connect">Try to read cash accounts from Manager</button></div></div>
+<div class="ed" id="editor"></div></details>
+<p class="note">Privacy: figures stay in this browser's local storage. Do not use on a shared profile. Always confirm figures against Manager's own reports.</p>
 </main>
 <script>
-/* ===== Chart of accounts (from Manager.io) ===== */
-const COA={
- cos:{label:'Less: Cost of sales',kind:'exp',accts:['Freight & courier','Direct labour']},
- income:{label:'Income',kind:'inc',accts:['Billable expenses - invoiced','Discount Received','Foreign exchange gains (losses)','General Income','Interest received','Inventory - sales','Investment gains (losses)','Miscellaneous Incoming Payments','Sales','Other income','Other revenue']},
- expense:{label:'Less: Expenses',kind:'exp',accts:['Bank charges','Billable expenses - cost','Computer equipment','Credit Card Charges','Discount Allowed','Entertainment','Fixed assets - depreciation','Food & Beverages Expenses','Funding A/c HU','Groceries','Insurance and Premiums','Interest Paid','Inventory - cost','Inventory Write-offs','Lease','Legal fees','Lottery Tickets','Medical Expenses','Miscellaneous Outgoing Payments','Motor vehicle expenses','Other Expenses','Parking Expenses','Petrol, Oil and Lubes','Printing and stationery','Rent','Repairs and maintenance','Rounding expense','Salary','Subscriptions and Memberships','Telephone','Travel Expenses','Write Off','Beverages Expenses']},
- opex:{label:'Less: Operating expenses',kind:'exp',accts:['Advertising & marketing','Travel & accommodation','Relevant Expense','Utilities','Tour & Travel Expenses','Office supplies','Telephone & internet','TV Recharge Expense','Accounting & legal fees']},
- otherinc:{label:'Other income',kind:'inc',accts:['Interest income']},
- finance:{label:'Less: Finance costs',kind:'exp',accts:['Interest expense']},
- asset:{label:'Assets',kind:'asset',accts:['Accounts receivable','Billable expenses','Cash & cash equivalents','Cash In Transit','Fixed assets, accumulated depreciation','Fixed assets, at cost','Inventory on hand','Investments','Other Receivables','Withholding tax receivable','Negative inventory clearing']},
- liability:{label:'Liabilities',kind:'liab',accts:['Accounts payable','Credit Cards','Employee clearing account','GST','Cess','GST Ledger','Ineligible ITC','RCM Payable','Interdivisional loan','Other Payables','Withholding tax payable']},
- loans:{label:'Loan and Liabilities',kind:'liab',accts:['Cholamandalam Investment and Finance Company Limited','HDFC Credit Card EMI','Kisetsu Saison Finance India Private Limited','SBI Credit Card EMI']},
- equity:{label:'Equity',kind:'eq',accts:['Capital Accounts','Inter Account Transfers','Retained earnings']}
-};
-const MAP={};Object.entries(COA).forEach(([g,v])=>v.accts.forEach(a=>{MAP[a.toLowerCase()]=g}));
-/* common aliases so older CSVs still classify */
-const ALIAS={'salary income':'income','food':'Food & Beverages Expenses','groceries':'Groceries','utilities':'Utilities','credit card':'Credit Cards','fd interest':'Interest income','interest':'Interest income','fixed deposit':'Investments','mutual fund':'Investments','shares':'Investments','sip':'Investments','other income':'Other income'};
-function classify(acct){
- const k=acct.trim().toLowerCase();
- if(MAP[k])return{group:MAP[k],name:Object.values(COA).flatMap(v=>v.accts).find(a=>a.toLowerCase()===k)};
- const al=ALIAS[k];
- if(al){if(MAP[al.toLowerCase()])return{group:MAP[al.toLowerCase()],name:al};if(COA[al])return{group:al,name:acct}}
- return{group:null,name:acct};
-}
-/* ===== helpers ===== */
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const fmt=n=>(n<0?'-':'')+'₹'+Math.abs(Number(n||0)).toLocaleString('en-IN',{maximumFractionDigits:2});
-const $=id=>document.getElementById(id);let rows=[];
-function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function setStatus(s,w){const e=$('status');e.textContent=s;e.className='status'+(w?' warn':'')}
-function isoDate(s){s=(s||'').trim();let m=s.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})/);if(m)return m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0');
- m=s.match(/^(\d{1,2})[-\/.](\d{1,2})[-\/.](\d{4})/);if(m)return m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0');return''}
-function parseCSV(text){
- const lines=text.replace(/\r/g,'').replace(/^\uFEFF/,'').split('\n').filter(x=>x.trim());if(!lines.length)return[];
- const pl=line=>{let a=[],v='',q=false;for(let i=0;i<line.length;i++){let c=line[i];if(c=='"'&&line[i+1]=='"'&&q){v+='"';i++}else if(c=='"')q=!q;else if(c==','&&!q){a.push(v);v=''}else v+=c}a.push(v);return a};
- const h=pl(lines.shift()).map(x=>x.trim().toLowerCase());
- return lines.map(l=>{const a=pl(l),o={};h.forEach((k,i)=>o[k]=(a[i]||'').trim());
-  const legacy=('category' in o)&&!('bank' in o);   // old format: category = ledger, account = bank
-  const acct=legacy?(o.category||''):(o.account||o.category||'');
-  const bank=legacy?(o.account||''):(o.bank||'');
-  const type=(o.type||'').toLowerCase();
-  const c=classify(acct);
-  let dir=(o.direction||'').toLowerCase();
-  if(dir!=='in'&&dir!=='out'){
-   if(['income','receipt','salary'].includes(type))dir='in';
-   else if(['expense','payment'].includes(type))dir='out';
-   else{const k=c.group&&COA[c.group].kind;dir=(k==='inc'||k==='liab'&&type==='borrow')?'in':'out'}
-  }
-  return{date:isoDate(o.date||o.transaction_date),description:o.description||'',account:c.name||acct||'Uncategorised',group:c.group,dir,
-   amount:Math.abs(Number((o.amount||'0').replace(/,/g,''))),bank:bank};
- }).filter(x=>x.date&&Number.isFinite(x.amount));
+const cls=v=>v>0?'pos':v<0?'neg':'';
+const KEY='pferp_fd_v1';
+const GROUPS=[['income','Income'],['cos','Cost of sales'],['expense','Expenses'],['opex','Operating expenses'],['otherinc','Other income'],['finance','Finance costs']];
+const SEC={
+ cash:{t:'Cash & bank accounts',f:[['name','Account','text'],['amount','Balance ₹','number']]},
+ recv:{t:'Receivables (customers owe you)',f:[['name','Customer','text'],['amount','Amount ₹','number'],['due','Due date','date']]},
+ cards:{t:'Credit cards',f:[['name','Card','text'],['amount','Outstanding ₹','number'],['limit','Limit ₹','number'],['due','Due date','date']]},
+ loans:{t:'Loans',f:[['name','Loan','text'],['amount','Outstanding ₹','number']]},
+ assets:{t:'Other assets (investments, FD, fixed assets)',f:[['name','Asset','text'],['amount','Value ₹','number']]},
+ liabs:{t:'Other liabilities (GST, payables)',f:[['name','Liability','text'],['amount','Amount ₹','number']]},
+ pl:{t:'Profit & loss lines',f:[['group','Section','group'],['name','Account','text'],['amount','Amount ₹','number']]},
+ cf:{t:'Cash flow by month',f:[['month','Month (YYYY-MM)','text'],['in','Money in ₹','number'],['out','Money out ₹','number']]}
+};
+const EMPTY=()=>({period:'',cash:[],recv:[],cards:[],loans:[],assets:[],liabs:[],pl:[],cf:[]});
+let D=EMPTY();
+try{const s=JSON.parse(localStorage.getItem(KEY)||'null');if(s)D=Object.assign(EMPTY(),s)}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(D))}catch(e){}}
+const sum=(a,f='amount')=>(D[a]||[]).reduce((t,r)=>t+(Number(r[f])||0),0);
+const noData='<div class="empty">No figures yet. Open “Update figures” below.</div>';
+function listTable(rows,cols){return '<table><tbody>'+rows.map(r=>'<tr>'+cols.map((c,i)=>'<td'+(i?' class="n"':'')+'>'+c(r)+'</td>').join('')+'</tr>').join('')+'</tbody></table>'}
+
+function compute(){
+ const g={};GROUPS.forEach(([k])=>g[k]=D.pl.filter(r=>r.group===k).reduce((t,r)=>t+(Number(r.amount)||0),0));
+ const gross=g.income-g.cos,op=gross-g.expense-g.opex,net=op+g.otherinc-g.finance;
+ const cash=sum('cash'),recv=sum('recv'),cards=sum('cards'),loans=sum('loans'),oa=sum('assets'),ol=sum('liabs');
+ const assets=cash+recv+oa,liab=cards+loans+ol;
+ const cfIn=sum('cf','in'),cfOut=sum('cf','out');
+ return{g,gross,op,net,cash,recv,cards,loans,oa,ol,assets,liab,netAssets:assets-liab,cfIn,cfOut,cfNet:cfIn-cfOut};
 }
-/* ===== charts ===== */
-function drawBars(canvas,labels,sets){
- const c=canvas.getContext('2d'),w=canvas.width,h=canvas.height;c.clearRect(0,0,w,h);const max=Math.max(1,...sets.flatMap(s=>s.values));
- const left=48,bottom=h-35,top=15,plotH=bottom-top,plotW=w-left-15;c.strokeStyle='#e5e9f0';c.fillStyle='#667085';c.font='12px Arial';
- for(let i=0;i<5;i++){let y=top+plotH*i/4;c.beginPath();c.moveTo(left,y);c.lineTo(w-10,y);c.stroke()}
- const group=plotW/Math.max(1,labels.length),bw=Math.min(28,group/(sets.length+1));
- labels.forEach((lab,i)=>{sets.forEach((s,j)=>{let v=Math.max(0,s.values[i]||0),bh=v/max*(plotH-8),x=left+i*group+group/2+(j-(sets.length-1)/2)*(bw+4)-bw/2;c.fillStyle=s.color;c.fillRect(x,bottom-bh,bw,bh)});c.fillStyle='#667085';c.textAlign='center';c.fillText(lab,left+i*group+group/2,bottom+19)});
+function fit(c){const r=c.getBoundingClientRect(),d=window.devicePixelRatio||1;c.width=Math.max(300,Math.round((r.width||600)*d));c.height=Math.round((r.height||230)*d);return{x:c.getContext('2d'),w:c.width,h:c.height,d}}
+function drawBars(c,labels,sets){
+ const{x,w,h,d}=fit(c);x.clearRect(0,0,w,h);
+ if(!labels.length){x.fillStyle='#667085';x.font=13*d+'px Arial';x.fillText('No cash flow figures yet',20*d,40*d);return}
+ const max=Math.max(1,...sets.flatMap(s=>s.v)),left=56*d,bottom=h-30*d,top=14*d,ph=bottom-top,pw=w-left-12*d;
+ x.strokeStyle='#e5e9f0';x.fillStyle='#667085';x.font=11*d+'px Arial';x.textAlign='right';
+ for(let i=0;i<=4;i++){const y=top+ph*i/4;x.beginPath();x.moveTo(left,y);x.lineTo(w-8*d,y);x.stroke();const val=max*(1-i/4);x.fillText(val>=100000?(val/100000).toFixed(1)+'L':val>=1000?Math.round(val/1000)+'k':Math.round(val),left-6*d,y+4*d)}
+ const gp=pw/labels.length,bw=Math.min(30*d,gp/(sets.length+1));x.textAlign='center';
+ labels.forEach((lab,i)=>{sets.forEach((s,j)=>{const bh=Math.max(0,s.v[i]||0)/max*(ph-4*d),bx=left+i*gp+gp/2+(j-(sets.length-1)/2)*(bw+3*d)-bw/2;x.fillStyle=s.c;x.fillRect(bx,bottom-bh,bw,bh)});x.fillStyle='#667085';x.fillText(lab.slice(2),left+i*gp+gp/2,bottom+16*d)});
 }
-function drawDonut(canvas,items){const c=canvas.getContext('2d'),w=canvas.width,h=canvas.height;c.clearRect(0,0,w,h);
- items=items.filter(x=>x[1]>0);let total=items.reduce((a,x)=>a+x[1],0)||1,start=-Math.PI/2;const colors=['#2457d6','#13a078','#e29a32','#a05bd4','#dc5b68','#568caa','#8993a4'];
- items.slice(0,7).forEach((x,i)=>{let end=start+x[1]/total*Math.PI*2;c.beginPath();c.moveTo(130,125);c.arc(130,125,88,start,end);c.closePath();c.fillStyle=colors[i];c.fill();start=end});
- c.font='12px Arial';c.textAlign='left';items.slice(0,7).forEach((x,i)=>{c.fillStyle=colors[i];c.fillRect(245,25+i*29,12,12);c.fillStyle='#172033';c.fillText(x[0].slice(0,22)+' '+fmt(x[1]),263,36+i*29)})}
-/* ===== calculations ===== */
-function signed(r){const k=r.group&&COA[r.group].kind;const a=r.amount;
- if(k==='inc')return r.dir==='in'?a:-a;            // income up when money comes in
- if(k==='exp')return r.dir==='out'?a:-a;           // expense up when money goes out
- if(k==='asset')return r.dir==='out'?a:-a;         // asset up when money goes out (purchase)
- if(k==='liab')return r.dir==='in'?a:-a;           // liability up when borrowing (money in)
- if(k==='eq')return r.dir==='in'?a:-a;
- return r.dir==='in'?a:-a;}
-function sumGroup(rs,g){const m={};rs.filter(r=>r.group===g).forEach(r=>m[r.account]=(m[r.account]||0)+signed(r));return m}
-const tot=m=>Object.values(m).reduce((a,b)=>a+b,0);
-function lines(m){return Object.entries(m).sort((a,b)=>Math.abs(b[1])-Math.abs(a[1])).map(([k,v])=>`<tr><td>&nbsp;&nbsp;${esc(k)}</td><td class="n">${fmt(v)}</td></tr>`).join('')}
-function section(label,m,cls){return`<tr class="grp"><td colspan="2">${esc(label)}</td></tr>${lines(m)}<tr class="tot"><td>Total — ${esc(label)}</td><td class="n">${fmt(tot(m))}</td></tr>`}
-function colour(el,v){el.className='metric '+(v>0?'pos':v<0?'neg':'')}
 function render(){
- const months=[...new Set(rows.map(x=>x.date.slice(0,7)))].sort();
- const sel=$('period'),cur=sel.value||'ALL';
- sel.innerHTML='<option value="ALL">All imported</option>'+months.slice().reverse().map(m=>`<option value="${m}">${m}</option>`).join('');
- sel.value=[...sel.options].some(o=>o.value===cur)?cur:'ALL';
- const rs=sel.value==='ALL'?rows:rows.filter(x=>x.date.slice(0,7)===sel.value);
- const g={};Object.keys(COA).forEach(k=>g[k]=sumGroup(rs,k));
- const income=tot(g.income),cos=tot(g.cos),gross=income-cos;
- const exp=tot(g.expense),opex=tot(g.opex),oinc=tot(g.otherinc),fin=tot(g.finance);
- const opProfit=gross-exp-opex,net=opProfit+oinc-fin;
- $('mIncome').textContent=fmt(income+oinc);$('mGross').textContent=fmt(gross);$('mExp').textContent=fmt(cos+exp+opex+fin);$('mNet').textContent=fmt(net);colour($('mNet'),net);
- $('mDebt').textContent=fmt(-tot(g.loans)-Math.min(0,(g.liability['Credit Cards']||0)));
- $('mInv').textContent=fmt(g.asset['Investments']||0);
- const cash=rs.filter(r=>r.bank||true).reduce((a,r)=>a+(r.dir==='in'?r.amount:-r.amount),0);
- $('mCash').textContent=fmt(cash);colour($('mCash'),cash);
- const un=rs.filter(r=>!r.group);$('mCount').textContent=rs.length+' / '+un.length;
- /* P&L */
- $('pl').innerHTML=rs.length?`<table><tbody>${section(COA.income.label,g.income)}${section(COA.cos.label,g.cos)}
- <tr class="tot"><td>Gross profit (loss)</td><td class="n">${fmt(gross)}</td></tr>${section(COA.expense.label,g.expense)}${section(COA.opex.label,g.opex)}
- <tr class="tot"><td>Operating profit (loss)</td><td class="n">${fmt(opProfit)}</td></tr>${section(COA.otherinc.label,g.otherinc)}${section(COA.finance.label,g.finance)}
- <tr class="big"><td>Net profit (loss)</td><td class="n">${fmt(net)}</td></tr></tbody></table>`:'<span class="muted">No data</span>';
- /* BS movement */
- const aT=tot(g.asset),lT=tot(g.liability)+tot(g.loans),eT=tot(g.equity);
- $('bs').innerHTML=rs.length?`<table><tbody>${section(COA.asset.label,g.asset)}${section(COA.liability.label,g.liability)}${section(COA.loans.label,g.loans)}${section(COA.equity.label,g.equity)}
- <tr class="big"><td>Net asset movement (assets − liabilities)</td><td class="n">${fmt(aT-lT)}</td></tr></tbody></table>`:'<span class="muted">No data</span>';
- /* charts */
- const isInc=r=>r.group&&COA[r.group].kind==='inc',isExp=r=>r.group&&COA[r.group].kind==='exp';
- const ms=months.slice(-8),sm=(m,f)=>rows.filter(r=>r.date.slice(0,7)===m&&f(r)).reduce((a,r)=>a+signed(r),0);
- drawBars($('monthly'),ms.map(x=>x.slice(2)),[{values:ms.map(m=>sm(m,isInc)),color:'#2457d6'},{values:ms.map(m=>sm(m,isExp)),color:'#e29a32'}]);
- const cats={};rs.filter(isExp).forEach(r=>cats[r.account]=(cats[r.account]||0)+signed(r));
- drawDonut($('category'),Object.entries(cats).sort((a,b)=>b[1]-a[1]));
- $('unmapped').innerHTML=un.length?'<ul>'+[...new Set(un.map(x=>x.account))].map(a=>'<li>'+esc(a)+'</li>').join('')+'</ul>':'None, all rows mapped to your chart.';
- $('transactions').innerHTML=rs.slice(-30).reverse().map(x=>`<tr><td>${esc(x.date)}</td><td>${esc(x.description)}</td><td>${esc(x.account)}</td><td>${esc(x.group?COA[x.group].label:'Unmapped')}</td><td>${esc(x.dir)}</td><td class="n">${fmt(x.amount)}</td><td>${esc(x.bank)}</td></tr>`).join('')||'<tr><td colspan="7">No transactions</td></tr>';
- try{localStorage.setItem('pferp_rows_v2',JSON.stringify(rows))}catch(e){}
+ const m=compute();
+ $('periodLbl').textContent=D.period||'set period under Update figures';
+ $('kpis').innerHTML=[['Cash & bank',m.cash,''],['Receivables',m.recv,''],['Credit card outstanding',m.cards,m.cards>0?'neg':''],['Net profit (loss)',m.net,cls(m.net)],['Net cash flow',m.cfNet,cls(m.cfNet)],['Net assets',m.netAssets,cls(m.netAssets)]]
+  .map(([k,v,c])=>`<div class="card"><div class="k">${k}</div><div class="v ${c}">${fmt(v)}</div></div>`).join('');
+ $('cash').innerHTML=D.cash.length?listTable(D.cash,[r=>esc(r.name),r=>fmt(r.amount)])+`<table><tbody><tr class="tot"><td>Total cash &amp; bank</td><td class="n">${fmt(m.cash)}</td></tr></tbody></table>`:noData;
+ const cf=D.cf.filter(r=>r.month).slice().sort((a,b)=>a.month<b.month?-1:1).slice(-8);
+ drawBars($('cfChart'),cf.map(r=>r.month),[{v:cf.map(r=>+r.in||0),c:'#2457d6'},{v:cf.map(r=>+r.out||0),c:'#e29a32'}]);
+ $('cf').innerHTML=cf.length?'<table><thead><tr><th>Month</th><th class="n">In</th><th class="n">Out</th><th class="n">Net</th></tr></thead><tbody>'+cf.map(r=>{const n=(+r.in||0)-(+r.out||0);return`<tr><td>${esc(r.month)}</td><td class="n">${fmt(r.in)}</td><td class="n">${fmt(r.out)}</td><td class="n ${cls(n)}">${fmt(n)}</td></tr>`}).join('')+`<tr class="tot"><td>Total</td><td class="n">${fmt(m.cfIn)}</td><td class="n">${fmt(m.cfOut)}</td><td class="n ${cls(m.cfNet)}">${fmt(m.cfNet)}</td></tr></tbody></table>`:'';
+ const sec=(k,l)=>{const rs=D.pl.filter(r=>r.group===k);return rs.length?`<tr class="grp"><td colspan="2">${l}</td></tr>`+rs.map(r=>`<tr><td>&nbsp;&nbsp;${esc(r.name)}</td><td class="n">${fmt(r.amount)}</td></tr>`).join('')+`<tr class="tot"><td>Total — ${l}</td><td class="n">${fmt(m.g[k])}</td></tr>`:''};
+ $('pl').innerHTML=D.pl.length?'<table><tbody>'+sec('income','Income')+sec('cos','Cost of sales')+`<tr class="tot"><td>Gross profit (loss)</td><td class="n">${fmt(m.gross)}</td></tr>`+sec('expense','Expenses')+sec('opex','Operating expenses')+`<tr class="tot"><td>Operating profit (loss)</td><td class="n">${fmt(m.op)}</td></tr>`+sec('otherinc','Other income')+sec('finance','Finance costs')+`<tr class="big"><td>Net profit (loss)</td><td class="n ${cls(m.net)}">${fmt(m.net)}</td></tr></tbody></table>`:noData;
+ const has=m.assets||m.liab;
+ $('bs').innerHTML=has?`<table><tbody><tr class="grp"><td colspan="2">Assets</td></tr><tr><td>&nbsp;&nbsp;Cash &amp; bank</td><td class="n">${fmt(m.cash)}</td></tr><tr><td>&nbsp;&nbsp;Receivables</td><td class="n">${fmt(m.recv)}</td></tr>${D.assets.map(r=>`<tr><td>&nbsp;&nbsp;${esc(r.name)}</td><td class="n">${fmt(r.amount)}</td></tr>`).join('')}<tr class="tot"><td>Total assets</td><td class="n">${fmt(m.assets)}</td></tr>
+ <tr class="grp"><td colspan="2">Liabilities</td></tr><tr><td>&nbsp;&nbsp;Credit cards</td><td class="n">${fmt(m.cards)}</td></tr>${D.loans.map(r=>`<tr><td>&nbsp;&nbsp;${esc(r.name)}</td><td class="n">${fmt(r.amount)}</td></tr>`).join('')}${D.liabs.map(r=>`<tr><td>&nbsp;&nbsp;${esc(r.name)}</td><td class="n">${fmt(r.amount)}</td></tr>`).join('')}<tr class="tot"><td>Total liabilities</td><td class="n">${fmt(m.liab)}</td></tr>
+ <tr class="big"><td>Net assets</td><td class="n ${cls(m.netAssets)}">${fmt(m.netAssets)}</td></tr></tbody></table>`:noData;
+ const today=new Date().toISOString().slice(0,10),od=D.recv.filter(r=>r.due&&r.due<today),odT=od.reduce((t,r)=>t+(+r.amount||0),0);
+ $('recv').innerHTML=D.recv.length?`<div class="chips"><span class="chip">Total ${fmt(m.recv)}</span><span class="chip ${odT?'neg':''}">Overdue ${fmt(odT)}</span></div><table><thead><tr><th>Customer</th><th>Due</th><th class="n">Amount</th></tr></thead><tbody>`+D.recv.map(r=>`<tr><td>${esc(r.name)}</td><td class="${r.due&&r.due<today?'neg':''}">${esc(r.due||'')}${r.due&&r.due<today?' · overdue':''}</td><td class="n">${fmt(r.amount)}</td></tr>`).join('')+'</tbody></table>':noData;
+ $('cards').innerHTML=D.cards.length?`<div class="chips"><span class="chip">Outstanding ${fmt(m.cards)}</span><span class="chip">Limit ${fmt(sum('cards','limit'))}</span></div><table><thead><tr><th>Card</th><th>Due</th><th>Used</th><th class="n">Outstanding</th></tr></thead><tbody>`+D.cards.map(r=>{const u=+r.limit>0?Math.min(100,Math.round((+r.amount||0)/+r.limit*100)):null;return`<tr><td>${esc(r.name)}</td><td>${esc(r.due||'')}</td><td>${u===null?'':`<div class="bar"><i class="${u>=70?'hi':''}" style="width:${u}%"></i></div><span class="muted">${u}%</span>`}</td><td class="n">${fmt(r.amount)}</td></tr>`}).join('')+'</tbody></table>':noData;
+ save();
 }
-$('period').onchange=render;
-/* ===== reference table ===== */
-$('coaRef').innerHTML=Object.values(COA).map(v=>`<p><b>${esc(v.label)}</b>: ${v.accts.map(esc).join(' · ')}</p>`).join('');
-/* ===== events ===== */
-$('csvFile').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;rows=parseCSV(await f.text());render();const u=rows.filter(r=>!r.group).length;setStatus(rows.length+' rows imported from '+f.name+(u?' · '+u+' unmapped':''),!!u);e.target.value=''});
-const SAMPLE='date,description,account,direction,amount,bank\n2026-11-01,Monthly salary received,Sales,in,65000,HDFC Savings\n2026-11-02,Groceries,Groceries,out,4500,HDFC Savings\n2026-11-03,Electricity bill,Utilities,out,1800,HDFC Savings\n2026-11-05,Mobile recharge,Telephone & internet,out,599,HDFC Savings\n2026-11-07,Credit card EMI,HDFC Credit Card EMI,out,12000,HDFC Savings\n2026-11-10,FD interest,Interest income,in,850,HDFC Savings\n2026-11-12,Mutual fund SIP,Investments,out,5000,HDFC Savings\n2026-11-15,Petrol,"Petrol, Oil and Lubes",out,1500,HDFC Savings';
-$('sample').onclick=()=>{rows=parseCSV(SAMPLE);render();setStatus('Sample data loaded. Replace with your own CSV',true)};
-function download(name,text){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'text/csv'}));a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)}
-const q=v=>'"'+String(v).replace(/"/g,'""')+'"';
-$('template').onclick=()=>download('Transactions_Template.csv',SAMPLE);
-$('export').onclick=()=>download('Personal_Finance_Transactions_Export.csv','date,description,account,direction,amount,bank\n'+rows.map(x=>[x.date,x.description,x.account,x.dir,x.amount,x.bank].map(q).join(',')).join('\n'));
-/* Experimental Manager bridge (unverified against Manager 26.x; CSV is the supported path) */
-function pm(message,timeout=8000){return new Promise((resolve,reject)=>{const id=(crypto.randomUUID?crypto.randomUUID():String(Date.now())+Math.random());
- const t=setTimeout(()=>{removeEventListener('message',fn);reject(Error('No response from Manager. This API bridge is experimental or not supported by your version. Use CSV import.'))},timeout);
- function fn(e){if(e.data?.requestId===id&&e.data?.type==='api-request-response'){clearTimeout(t);removeEventListener('message',fn);resolve(e.data.body)}}
- addEventListener('message',fn);parent.postMessage({...message,requestId:id},'*')})}
-$('refresh').onclick=async()=>{try{setStatus('Connecting to Manager…');const data=await pm({type:'api-request',method:'GET',path:'/api4/bank-or-cash-accounts'});
- const arr=Array.isArray(data)?data:(data?.items||[]);
- $('accounts').innerHTML=arr.length?'<table><thead><tr><th>Account</th><th>Currency</th></tr></thead><tbody>'+arr.map(a=>'<tr><td>'+esc(a.name||a.Name||'Unnamed')+'</td><td class="muted">'+esc(a.currency||a.Currency||'')+'</td></tr>').join('')+'</tbody></table>':'Connected but no rows returned.';
- setStatus('Manager account list refreshed')}catch(e){setStatus(e.message,true);$('accounts').textContent=e.message}};
-try{rows=JSON.parse(localStorage.getItem('pferp_rows_v2')||'[]')}catch(e){rows=[]}render();
+/* ---- editor ---- */
+function buildEditor(){
+ $('editor').innerHTML=Object.entries(SEC).map(([k,s])=>`<div class="card"><h2>${s.t}</h2><table><thead><tr>${s.f.map(f=>`<th>${f[1]}</th>`).join('')}<th></th></tr></thead><tbody>`+D[k].map((r,i)=>'<tr>'+s.f.map(([f,,t])=>'<td>'+(t==='group'?`<select data-k="${k}" data-i="${i}" data-f="${f}">${GROUPS.map(([v,l])=>`<option value="${v}"${r[f]===v?' selected':''}>${l}</option>`).join('')}</select>`:`<input data-k="${k}" data-i="${i}" data-f="${f}" type="${t}" ${t==='number'?'step="any"':''} value="${esc(r[f]??'')}">`)+'</td>').join('')+`<td><button class="x" data-del="${k}" data-i="${i}" title="Remove">✕</button></td></tr>`).join('')+`</tbody></table><div class="tools"><button class="s" data-add="${k}">+ Add row</button></div></div>`).join('');
+}
+$('editor').addEventListener('input',e=>{const t=e.target,k=t.dataset.k;if(!k)return;const i=+t.dataset.i,f=t.dataset.f;D[k][i][f]=t.type==='number'?(t.value===''?0:Number(t.value)):t.value;render()});
+$('editor').addEventListener('click',e=>{const t=e.target;
+ if(t.dataset.add){const k=t.dataset.add,r={};SEC[k].f.forEach(([f,,ty])=>r[f]=ty==='number'?0:ty==='group'?'expense':'');D[k].push(r);buildEditor();render()}
+ if(t.dataset.del){D[t.dataset.del].splice(+t.dataset.i,1);buildEditor();render()}});
+$('period').value=D.period;$('period').oninput=e=>{D.period=e.target.value;render()};
+$('example').onclick=()=>{D={period:'Example: Nov 2026',
+ cash:[{name:'HDFC Savings',amount:182500},{name:'Other Bank Savings',amount:46200},{name:'Cash in Hand',amount:5000}],
+ recv:[{name:'Client A',amount:25000,due:'2026-11-05'},{name:'Client B',amount:12000,due:'2026-12-10'}],
+ cards:[{name:'HDFC Credit Card',amount:34500,limit:150000,due:'2026-12-05'},{name:'SBI Credit Card',amount:92000,limit:120000,due:'2026-12-12'}],
+ loans:[{name:'Cholamandalam loan',amount:210000}],assets:[{name:'Investments',amount:350000},{name:'Fixed assets',amount:120000}],liabs:[{name:'GST',amount:6200}],
+ pl:[{group:'income',name:'Sales',amount:65000},{group:'otherinc',name:'Interest income',amount:850},{group:'expense',name:'Groceries',amount:4500},{group:'opex',name:'Utilities',amount:1800},{group:'finance',name:'Interest expense',amount:2400}],
+ cf:[{month:'2026-08',in:60000,out:48000},{month:'2026-09',in:62000,out:51000},{month:'2026-10',in:65000,out:70000},{month:'2026-11',in:65850,out:25399}]};
+ $('period').value=D.period;buildEditor();render()};
+let armed=false;$('clear').onclick=()=>{if(!armed){armed=true;$('clear').textContent='Click again to confirm';setTimeout(()=>{armed=false;$('clear').textContent='Clear all figures'},3000);return}armed=false;$('clear').textContent='Clear all figures';D=EMPTY();$('period').value='';buildEditor();render()};
+/* ---- Manager link (optional, experimental) ---- */
+const MGR={endpoint:null,token:null};
+function scan(o,d){d=d||0;if(!o||typeof o!=='object'||d>4)return;for(const k of Object.keys(o)){const v=o[k];if(typeof v==='string'){if(/token|apikey|api_key|authorization/i.test(k)&&!MGR.token)MGR.token=v.replace(/^Bearer\s+/i,'');if(/endpoint|apiurl|api_url|baseurl|base_url|^api$/i.test(k)&&/^(https?:\/\/|\/)/.test(v)&&!MGR.endpoint)MGR.endpoint=v}else scan(v,d+1)}}
+addEventListener('message',e=>{let d=e.data;if(typeof d==='string'){try{d=JSON.parse(d)}catch(x){return}}if(d&&typeof d==='object'&&e.source===parent&&parent!==window)scan(d)});
+function inManager(){try{return parent!==window}catch(e){return false}}
+function ask(path,ms){return new Promise((res,rej)=>{const id=String(Date.now())+Math.random();const t=setTimeout(()=>{removeEventListener('message',f);rej(Error('no reply'))},ms);function f(e){const d=e.data;if(d&&d.requestId===id&&/api-(request-)?response/.test(d.type||'')){clearTimeout(t);removeEventListener('message',f);res(d.body)}}addEventListener('message',f);parent.postMessage({type:'api-request',method:'GET',path,requestId:id},'*')})}
+$('connect').onclick=async()=>{
+ if(!inManager()){$('status').textContent='Open this page from the Manager button to connect';return}
+ $('status').textContent='Connecting to Manager…';let data=null;
+ for(const p of ['bank-or-cash-accounts','bank-and-cash-accounts','bank-or-cash-account']){try{data=await ask('/api4/'+p,3500);if(data)break}catch(e){}}
+ if(!data&&MGR.endpoint&&MGR.token){let b=MGR.endpoint.replace(/\/+$/,'');if(!/api4/i.test(b))b+='/api4';for(const p of ['bank-or-cash-accounts','bank-and-cash-accounts']){try{const r=await fetch(b+'/'+p,{headers:{Authorization:'Bearer '+MGR.token}});if(r.ok){data=await r.json();break}}catch(e){}}}
+ const arr=Array.isArray(data)?data:(data&&(data.items||data.data))||[];
+ if(!arr.length){$('status').textContent='Manager did not return accounts. Enter figures manually under Update figures';return}
+ arr.forEach(a=>{const n=a.name||a.Name;if(n&&!D.cash.some(r=>r.name===n))D.cash.push({name:n,amount:Number(a.balance??a.Balance??0)||0})});
+ buildEditor();render();$('status').textContent='Read '+arr.length+' account(s) from Manager. Check balances';
+};
+if(inManager()){try{parent.postMessage({type:'page-request'},'*')}catch(e){}$('status').textContent='Running inside Manager'}
+buildEditor();render();
+addEventListener('resize',()=>render());
 </script></body></html>
