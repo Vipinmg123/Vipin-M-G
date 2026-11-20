@@ -30,7 +30,7 @@ button.s{background:#e9eefb;color:#173b91}button.x{background:transparent;color:
 .note{font-size:12px;color:var(--muted);line-height:1.5;margin-top:10px}
 @media(max-width:850px){.row{grid-template-columns:1fr}}
 </style></head><body>
-<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · build v17 · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
+<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · build v18 · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
 <main>
 <section class="kpis" id="kpis"></section>
 
@@ -179,7 +179,7 @@ const nz=o=>{const r={};for(const k of Object.keys(o||{})){const v=o[k];if(v==nu
 function deepFind(o,re,d){d=d||0;if(!o||typeof o!=='object'||d>4)return null;for(const k of Object.keys(o)){if(k==='_links'||k==='_actions'||/^obsolete/i.test(k))continue;const v=o[k];if(re.test(k)&&v!=null&&v!==''&&typeof v!=='object'&&isFinite(Number(v)))return Number(v);if(v&&typeof v==='object'){const r=deepFind(v,re,d+1);if(r!=null)return r}}return null}
 function fromApi(arr){return arr.map(a=>{const it=a.item||a,c=it.controlAccount;
  const bal=[/^actualbalance$/i,/^clearedbalance$/i,/^balance$/i].map(re=>deepFind(a,re)).find(v=>v!=null);
- return{name:it.name||it.Name||it.title||'',code:it.code||'',ctrl:typeof c==='string'?c:(c&&c.name)||'',actual:bal,avail:deepFind(a,/^availablecredit$/i),card:!!it.hasCreditLimit,lim:it.hasCreditLimit?(Number(it.creditLimit)||0):null}})}
+ return{key:it.key||a.key||it.id||'',name:it.name||it.Name||it.title||'',code:it.code||'',ctrl:typeof c==='string'?c:(c&&c.name)||'',actual:bal,avail:deepFind(a,/^availablecredit$/i),card:!!it.hasCreditLimit,lim:it.hasCreditLimit?(Number(it.creditLimit)||0):null}})}
 let busy=false;
 async function tryLive(){if(busy)return;busy=true;try{await tryLive2()}finally{busy=false}}
 async function tryLive2(){
@@ -256,6 +256,21 @@ async function probeDiag(){
   catch(e){log('PROBE '+p+'-batch -> '+e.message)}}
 }
 function nameList(rw){const o=[];walkNodes(rw,nd=>{const nm=nd.name||nd.displayName;if(typeof nm!=='string')return;const vs=Array.isArray(nd.cells)?nd.cells.map(c=>c&&c.text!=null?c.text:(c&&c.value!=null?c.value:'')).join('/'):'(group)';o.push(nm+'='+vs)});return o.join(' | ').slice(0,2500)}
+async function bankSummary(rows,items,P,qs){
+ let n=0,first=true;
+ for(const i of items){const it=i.item||i,K=i.key||it.key||it.id;if(!K){log('  saved report has no key: '+short(nz(i),200));continue}
+  const js=JSON.stringify(i);let a=rows.find(r=>r.key&&!r.__d&&js.includes(r.key));
+  if(!a)a=rows.filter(r=>r.name&&!r.__d&&(js.includes(JSON.stringify(r.name))||(r.code&&js.includes(JSON.stringify(r.code))))).sort((p,q)=>q.name.length-p.name.length)[0];
+  if(first)log('  saved report fields: '+short(nz(it),500));
+  try{const y=await askRaw(P+'-view'+(qs?qs+'&':'?')+'key='+K,6000),b=y.body||{};
+   const rw=Array.isArray(b.rows)?b.rows:(b.rows&&Array.isArray(b.rows.items)?b.rows.items:[]);
+   if(first){first=false;log('  summary saved fields: '+Object.keys(it).join(',')+' | view fields: '+Object.keys(b).join(','))}
+   if(!a){const bs=JSON.stringify([b.title,b.subtitles,b.description,it.title,it.description,it.name]);a=rows.filter(r=>r.name&&!r.__d&&(bs.includes(r.name)||(r.code&&bs.includes(r.code)))).sort((p,q)=>q.name.length-p.name.length)[0]}
+   let end=null;walkNodes(rw,nd=>{const nm=nd.name||nd.displayName;if(typeof nm==='string'&&/cash at the end of the period/i.test(nm)&&Array.isArray(nd.cells)&&nd.cells.length){const c=nd.cells[0];end=c&&typeof c.value==='number'?c.value:(c&&c.text?money(c.text):0)}});
+   log('  summary '+K.slice(0,8)+' -> '+(a?a.name:'NO ACCOUNT FOUND')+' end balance '+end);
+   if(a&&end!=null&&!a.__d){a.actual=end;a.__d=1;n++;const pr=(it.periods||[])[0];if(pr&&pr.toDate)rows.asAt='as at '+String(pr.toDate).slice(0,10)}
+  }catch(e){log('  summary '+K.slice(0,8)+' -> '+e.message)}}
+ return n}
 async function loadBalances(rows){
  let d;try{d=await askRaw('/api4/reports',4000)}catch(e){log('GET /api4/reports -> '+e.message);return false}
  const lk=(d.body&&d.body._links)||{};
@@ -264,6 +279,7 @@ async function loadBalances(rows){
   const qs=h.includes('?')?'?'+h.split('?')[1]:'',P=h.split('?')[0].replace(/-batch$/,'');
   let items=[];try{const x=await askRaw(h,4000);items=toArr(x.body)}catch(e){log(k+': list failed - '+e.message);continue}
   log(k+': '+items.length+' saved report(s)');window.__qs=qs;items.forEach(i=>{const it=i.item||i;log('  saved: '+short([it.title,it.periods,it.accountingMethod],260))});
+  if(k==='bankAccountSummary'&&items.length){const g=await bankSummary(rows,items,P,qs);log('  bank account summaries matched '+g+' of '+rows.length+' accounts');if(g>=1)return true}
   const q=[];
   items.forEach(i=>{const it=i.item||i;const K=it.key||it.id;
    Object.values(i._links||{}).forEach(b=>{const u=href(b);if(u&&/view|result/i.test(u))q.push(u)});
@@ -312,7 +328,7 @@ $('importCust').onclick=()=>{const t=parseTable($('pasteCust').value);const m=$(
  if(ni<0||ai<0){m.textContent='Missing Name or Balance column.';return}
  const list=t.data.map(r=>({name:r[ni]||'',amount:money(r[ai])})).filter(a=>a.name&&a.amount);
  const prev=D.recv;D.recv=list.map(a=>({name:a.name,amount:a.amount,due:(prev.find(p=>p.name===a.name)||{}).due||''}));buildEditor();render();m.textContent='Imported '+D.recv.length+' customers with balances.'};
-if(inManager()){log('Inside Manager (build v17). Starting live read…');setTimeout(tryLive,600)}else{log('Opened outside Manager. Live read only works from the Manager button.')}
+if(inManager()){log('Inside Manager (build v18). Starting live read…');setTimeout(tryLive,600)}else{log('Opened outside Manager. Live read only works from the Manager button.')}
 buildEditor();render();
 addEventListener('resize',()=>render());
 </script></body></html>
