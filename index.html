@@ -60,7 +60,7 @@ button.s{background:#e9eefb;color:#173b91}button.x{background:transparent;color:
 <p class="note">2) For receivables open <b>Customers</b>, click <b>Copy to clipboard</b>, paste below.</p>
 <textarea id="pasteCust" rows="3" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:6px" placeholder="Paste Customers table here"></textarea>
 <div class="tools"><button id="importCust">Import receivables</button><span id="custMsg" class="note"></span></div></div>
-<div class="card" style="margin-top:12px"><h2>Live connection log</h2><div class="tools" style="margin:0 0 8px"><button class="s" id="copylog">Copy log</button></div><pre id="diag" style="white-space:pre-wrap;font-size:12px;background:#f0f3f9;border-radius:8px;padding:10px;margin:0;max-height:420px;overflow:auto"></pre><p class="note">Shows what Manager sent to this page. No token is shown.</p></div>
+<div class="card" style="margin-top:12px"><h2>Live connection log</h2><div class="tools" style="margin:0 0 8px"><button class="s" id="copylog">Copy log</button><button class="s" id="clearlog">Clear log</button></div><pre id="diag" style="white-space:pre-wrap;font-size:12px;background:#f0f3f9;border-radius:8px;padding:10px;margin:0;max-height:420px;overflow:auto"></pre><p class="note">Shows what Manager sent to this page. No token is shown.</p></div>
 <div class="ed" id="editor"></div></details>
 <p class="note">Privacy: figures stay in this browser's local storage. Do not use on a shared profile. Always confirm figures against Manager's own reports.</p>
 </main>
@@ -196,8 +196,50 @@ async function tryLive2(){
  rows.forEach(r=>{if(!r.name)return;const card=r.card||/credit card/i.test(r.name);const lst=card?D.cards:D.cash;const ex=lst.find(x=>x.name===r.name);
   if(!ex)lst.push(card?{name:r.name,amount:0,limit:r.lim||0,due:''}:{name:r.name,amount:0});else if(card&&!ex.limit&&r.lim)ex.limit=r.lim});
  buildEditor();render();
+ $('status').textContent='Reading balances from Manager reports…';
+ const ok=await loadBalances(rows);
+ if(ok){const got=rows.filter(r=>r.actual!=null).length;rows.forEach(r=>{if(r.actual==null)r.actual=0});applyAccounts(rows);
+  $('status').textContent='Live: '+got+' of '+rows.length+' account balances ('+new Date().toTimeString().slice(0,5)+')';
+  $('diag').textContent='';log('Live read OK: '+got+' of '+rows.length+' balances loaded. Verify against Manager.');return}
+ log('Could not read balances from reports. Running discovery…');
  await exploreReports();
- $('status').textContent='Live: '+rows.length+' accounts and card limits read. Balances: use quick import';log('Balances are not part of the account list. See report discovery above.')}
+ $('status').textContent='Live: '+rows.length+' accounts and card limits read. Balances: use quick import'}
+/* leaf values of a report row, in order */
+function leaves(o,out,d){out=out||[];d=d||0;if(o==null||d>6)return out;if(typeof o!=='object'){out.push(o);return out}for(const k of Object.keys(o)){if(k==='_links'||k==='_actions')continue;leaves(o[k],out,d+1)}return out}
+const MONEYRE=/^[-−(]?\s*₹?\s*[-−]?\s*[\d,]+(\.\d+)?\)?$/;
+function matchBalances(rows,rws,absCards){let n=0;const seen=new Set();
+ rws.forEach(rw=>{const lv=leaves(rw),txt=lv.filter(v=>typeof v==='string').map(s=>s.trim().toLowerCase());
+  const a=rows.find(r=>r.name&&!seen.has(r)&&txt.some(t=>t===r.name.toLowerCase()||t===(r.code+' - '+r.name).toLowerCase()||t.endsWith(' - '+r.name.toLowerCase())));
+  if(!a)return;
+  const nums=lv.filter(v=>typeof v==='number'||(typeof v==='string'&&MONEYRE.test(v.trim())&&/\d/.test(v)&&!/[a-z]/i.test(v)));
+  if(!nums.length)return;
+  const last=nums[nums.length-1];let v=typeof last==='number'?last:money(last);
+  if(absCards&&(a.card||/credit card/i.test(a.name)))v=-Math.abs(v);
+  a.actual=v;seen.add(a);n++;if(n===1)log('  sample row: '+short(lv,200))});
+ return n}
+async function loadBalances(rows){
+ let d;try{d=await askRaw('/api4/reports',4000)}catch(e){log('GET /api4/reports -> '+e.message);return false}
+ const lk=(d.body&&d.body._links)||{};
+ for(const k of ['bankAccountSummary','balanceSheet','balanceSheetByGroup']){
+  const h=href(lk[k]);if(!h){log(k+': not offered by Manager');continue}
+  const qs=h.includes('?')?'?'+h.split('?')[1]:'',P=h.split('?')[0].replace(/-batch$/,'');
+  let items=[];try{const x=await askRaw(h,4000);items=toArr(x.body)}catch(e){log(k+': list failed - '+e.message);continue}
+  log(k+': '+items.length+' saved report(s)');
+  const q=[];
+  items.forEach(i=>{const it=i.item||i;const K=it.key||it.id;
+   Object.values(i._links||{}).forEach(b=>{const u=href(b);if(u&&/view|result/i.test(u))q.push(u)});
+   if(K){q.push(P+'-view/'+K+qs);q.push(P+'-view'+(qs?qs+'&':'?')+'key='+K);q.push(P+'/'+K+qs)}});
+  q.push(P+'-view'+qs);
+  const tried=new Set();
+  while(q.length&&tried.size<10){const u=q.shift();if(tried.has(u))continue;tried.add(u);
+   try{const y=await askRaw(u,5000),b=y.body||{},rw=Array.isArray(b.rows)?b.rows:[];
+    log('  '+u.slice(0,80)+' -> '+y.status+' rows='+rw.length);
+    if(rw.length){const n=matchBalances(rows,rw,k!=='bankAccountSummary');
+     if(n>=Math.ceil(rows.length/2)){log('  matched '+n+' accounts from '+k);return true}
+     log('  only '+n+' accounts matched, trying next')}
+    Object.values(b._links||{}).forEach(l=>{const x=href(l);if(x&&/view|result/i.test(x)&&!tried.has(x))q.push(x)})
+   }catch(e){log('  '+u.slice(0,60)+' -> '+e.message)}}}
+ return false}
 async function exploreReports(){
  let d;try{d=await askRaw('/api4/reports',4000)}catch(e){log('GET /api4/reports -> '+e.message);return}
  const lk=(d.body&&d.body._links)||{};const keys=Object.keys(lk).filter(k=>k!=='self'&&k!=='describedBy');
@@ -216,6 +258,7 @@ async function exploreReports(){
   }catch(e){log('LIST '+k+' -> '+e.message)}}
  if(!n)log('No balance/profit/cash/receivable report types found in /api4/reports.')}
 $('connect').onclick=tryLive;
+$('clearlog').onclick=()=>{$('diag').textContent=''};
 $('copylog').onclick=()=>{const t=document.createElement('textarea');t.value=$('diag').textContent;document.body.appendChild(t);t.select();let ok=false;try{ok=document.execCommand('copy')}catch(e){}t.remove();$('copylog').textContent=ok?'Copied':'Select the log text and press Ctrl+C'};
 /* quick import from Manager screens (Copy to clipboard) */
 $('importBank').onclick=()=>{const t=parseTable($('pasteBank').value);const m=$('bankMsg');
