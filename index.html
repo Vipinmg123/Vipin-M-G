@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Personal Finance ERP</title>
+<title>Finance Dashboard</title>
 <style>
 :root{--bg:#f4f6fa;--card:#fff;--ink:#172033;--muted:#667085;--line:#e5e9f0;--accent:#2457d6;--good:#17663b;--bad:#b42318;--warn:#8a5a00}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px system-ui,Segoe UI,Arial}
@@ -32,9 +32,22 @@ button.s{background:#e9eefb;color:#173b91}button.x{background:transparent;color:
 .legend{flex:1;min-width:180px;font-size:13px}.legend>div{display:flex;align-items:center;gap:8px;padding:4px 0;border-bottom:1px solid var(--line)}.legend .ln{flex:1}.sw{width:10px;height:10px;border-radius:3px;display:inline-block;flex:none}
 .sub{font-size:12px;color:var(--muted);margin:-6px 0 8px}
 @media(max-width:850px){.row{grid-template-columns:1fr}}
+.datebar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.datebar label{font-size:12px;color:var(--muted)}
+.datebar input[type=date]{padding:6px;border:1px solid var(--line);border-radius:6px;font:inherit;background:#fff}
+.datebar .sp{flex:1}
+#dMsg{flex-basis:100%;margin:0}
 </style></head><body>
-<header><div><h1>Personal Finance ERP</h1><p>Finance dashboard · INR ₹ · build v20 · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
+<header><div><h1>Finance Dashboard</h1><p>INR ₹ · build v23 · <span id="periodLbl">set period under Update figures</span></p></div><div id="status">Not connected to Manager</div></header>
 <main>
+<section class="card datebar" id="datebar">
+<label for="dFrom">From</label><input type="date" id="dFrom"><label for="dTo">To</label><input type="date" id="dTo">
+<button id="dApply">Apply dates</button>
+<button class="s" id="dMonth">This month</button><button class="s" id="dLast">Last month</button><button class="s" id="dFY">This financial year</button><button class="s" id="d30">Last 30 days</button><button class="s" id="dReset">Use Manager's saved dates</button>
+<span class="sp"></span>
+<button class="s" id="xXlsx">Download Excel</button><button class="s" id="xPdf">Download PDF</button>
+<p class="note" id="dMsg"></p>
+</section>
 <section class="kpis" id="kpis"></section>
 
 <section class="row">
@@ -336,7 +349,7 @@ function fromApi(arr){return arr.map(a=>{const it=a.item||a,c=it.controlAccount;
  const bal=[/^actualbalance$/i,/^clearedbalance$/i,/^balance$/i].map(re=>deepFind(a,re)).find(v=>v!=null);
  return{key:it.key||a.key||it.id||'',name:it.name||it.Name||it.title||'',code:it.code||'',ctrl:typeof c==='string'?c:(c&&c.name)||'',actual:bal,avail:deepFind(a,/^availablecredit$/i),card:!!it.hasCreditLimit,lim:it.hasCreditLimit?(Number(it.creditLimit)||0):null}})}
 let busy=false;
-async function tryLive(){if(busy)return;busy=true;try{await tryLive2()}finally{busy=false}}
+async function tryLive(){if(busy)return;busy=true;try{await tryLive2()}finally{busy=false;try{updateDMsg()}catch(e){}}}
 async function tryLive2(){
  if(!inManager()){$('status').textContent='Open this page from the Manager button to read live data';log('Page is not inside Manager.');return}
  $('status').textContent='Connecting to Manager…';log('Requesting page context…');try{parent.postMessage({type:'page-request'},'*')}catch(e){}
@@ -418,13 +431,13 @@ async function bankSummary(rows,items,P,qs){
   const js=JSON.stringify(i);let a=rows.find(r=>r.key&&!r.__d&&js.includes(r.key));
   if(!a)a=rows.filter(r=>r.name&&!r.__d&&(js.includes(JSON.stringify(r.name))||(r.code&&js.includes(JSON.stringify(r.code))))).sort((p,q)=>q.name.length-p.name.length)[0];
   if(first)log('  saved report fields: '+short(nz(it),500));
-  try{const y=await askRaw(P+'-view'+(qs?qs+'&':'?')+'key='+K,6000),b=y.body||{};
+  try{const y=await getView(P,qs,K,6000),b=y.body||{};
    const rw=Array.isArray(b.rows)?b.rows:(b.rows&&Array.isArray(b.rows.items)?b.rows.items:[]);
    if(first){first=false;log('  summary saved fields: '+Object.keys(it).join(',')+' | view fields: '+Object.keys(b).join(','));log('  summary rows: '+nameList(rw))}
    if(!a){const bs=JSON.stringify([b.title,b.subtitles,b.description,it.title,it.description,it.name]);a=rows.filter(r=>r.name&&!r.__d&&(bs.includes(r.name)||(r.code&&bs.includes(r.code)))).sort((p,q)=>q.name.length-p.name.length)[0]}
    let end=null;walkNodes(rw,nd=>{const nm=nd.name||nd.displayName;if(typeof nm==='string'&&/cash at the end of the period/i.test(nm)&&Array.isArray(nd.cells)&&nd.cells.length){const c=nd.cells[0];end=c&&typeof c.value==='number'?c.value:(c&&c.text?money(c.text):0)}});
    log('  summary '+K.slice(0,8)+' -> '+(a?a.name:'NO ACCOUNT FOUND')+' end balance '+end);
-   if(a&&end!=null&&!a.__d){a.actual=end;a.__d=1;n++;const pr=(it.periods||[])[0];if(pr&&pr.toDate)rows.asAt='as at '+String(pr.toDate).slice(0,10);
+   if(a&&end!=null&&!a.__d){a.actual=end;a.__d=1;n++;const pr=rangeActive()?{fromDate:RANGE.from,toDate:RANGE.to}:(it.periods||[])[0];if(pr&&pr.toDate)rows.asAt='as at '+String(pr.toDate).slice(0,10);
     if(pr&&pr.toDate&&!rows.per)rows.per={from:String(pr.fromDate||'').slice(0,10),to:String(pr.toDate).slice(0,10)};
     const cf=cfFromRows(rw);if(cf){a.cfd={open:cf.open,in:cf.inn,out:cf.out,close:end};log('  cash flow '+a.name+': open '+cf.open+', receipts '+cf.inn+(cf.gotIn?'':' (not found)')+', payments '+cf.out+(cf.gotOut?'':' (not found)')+', close '+end)}}
   }catch(e){log('  summary '+K.slice(0,8)+' -> '+e.message)}}
@@ -462,7 +475,7 @@ async function loadStatements(){
  const per=i=>((i.item||i).periods||[])[0]||{},to=i=>String(per(i).toDate||'');
  items=items.slice().sort((a,b)=>to(a)<to(b)?1:to(a)>to(b)?-1:0);
  const K=items[0].key||(items[0].item||{}).key;if(!K){log('Statements: saved Trial Balance has no key');return false}
- let y;try{y=await askRaw(P+'-view'+(qs?qs+'&':'?')+'key='+K,8000)}catch(e){log('Statements: view failed - '+e.message);return false}
+ let y;try{y=await getView(P,qs,K,8000)}catch(e){log('Statements: view failed - '+e.message);return false}
  const b=y.body||{},rw=Array.isArray(b.rows)?b.rows:(b.rows&&Array.isArray(b.rows.items)?b.rows.items:[]);
  if(y.status!==200||!rw.length){log('Statements: Trial Balance view -> '+y.status+' rows='+rw.length);return false}
  const SECT=[[/^income$/i,'income'],[/^cost of sales$/i,'cos'],[/^expenses$/i,'expense'],[/^operating expenses$/i,'opex'],[/^other income$/i,'otherinc'],[/^finance costs$/i,'finance'],[/^assets$/i,'A'],[/^liabilities$/i,'L'],[/^(equity|capital)/i,'E']];
@@ -485,7 +498,7 @@ async function loadStatements(){
  const oldB={};D.pl.forEach(r=>{if(+r.budget)oldB[r.group+'|'+r.name]=+r.budget});pl.forEach(r=>{const b=oldB[r.group+'|'+r.name];if(b)r.budget=b});
  D.pl=pl;D.assets=assets;D.loans=loans;D.liabs=liabs;
  if(!D.recv.length&&tbAR)D.recv=[{name:'Accounts receivable (trial balance total)',amount:r2(tbAR),due:''}];
- const p=per(items[0]);if(p.toDate)D.period=String(p.fromDate||'').slice(0,10)+' to '+String(p.toDate).slice(0,10)+' (Manager trial balance)';
+ const p=per(items[0]);if(rangeActive())D.period=RANGE.from+' to '+RANGE.to+' (custom dates)';else if(p.toDate)D.period=String(p.fromDate||'').slice(0,10)+' to '+String(p.toDate).slice(0,10)+' (Manager trial balance)';
  $('period').value=D.period;buildEditor();render();
  const m=compute();
  log('Statements OK: '+pl.length+' P&L lines, '+assets.length+' other assets, '+loans.length+' loans, '+liabs.length+' other liabilities. Net profit '+fmt(m.net)+'.');
@@ -511,6 +524,120 @@ async function exploreReports(){
     for(const u of Array.from(new Set(urls)).slice(0,3)){try{const y=await askRaw(u,5000);log('  VIEW '+u.slice(0,70)+' -> '+y.status+': '+short(y.error||y.body,420))}catch(e){log('  VIEW '+u.slice(0,50)+' -> '+e.message)}}}
   }catch(e){log('LIST '+k+' -> '+e.message)}}
  if(!n)log('No balance/profit/cash/receivable report types found in /api4/reports.')}
+
+/* ---- custom date range ---- */
+const RK='pferp_range';let RANGE={from:'',to:''},PSTYLE=null;
+try{const r=JSON.parse(localStorage.getItem(RK)||'null');if(r&&r.from&&r.to)RANGE=r}catch(e){}
+const ymd=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const rangeActive=()=>!!(RANGE.from&&RANGE.to&&PSTYLE!==-1);
+const PSTYLES=[(f,t)=>'&fromDate='+f+'&toDate='+t,(f,t)=>'&from='+f+'&to='+t,(f,t)=>'&startDate='+f+'&endDate='+t,(f,t)=>'&periods='+encodeURIComponent(JSON.stringify([{fromDate:f+'T00:00:00',toDate:t+'T00:00:00'}])),(f,t)=>'&period='+f+'..'+t];
+const rowsJson=y=>{const b=(y&&y.body)||{};return JSON.stringify(b.rows||[])};
+async function getView(P,qs,K,ms){
+ const base=P+'-view'+(qs?qs+'&':'?')+'key='+K;
+ if(!RANGE.from||!RANGE.to||PSTYLE===-1)return askRaw(base,ms);
+ if(PSTYLE!=null)return askRaw(base+PSTYLES[PSTYLE](RANGE.from,RANGE.to),ms);
+ const b0=await askRaw(base,ms),j0=rowsJson(b0);
+ for(let i=0;i<PSTYLES.length;i++){try{const y=await askRaw(base+PSTYLES[i](RANGE.from,RANGE.to),ms);
+  if(y.status===200&&rowsJson(y)!==j0&&(y.body&&y.body.rows)){PSTYLE=i;log('  Manager accepted the custom dates (style '+(i+1)+')');return y}}catch(e){}}
+ PSTYLE=-1;log('  Manager returned the same figures with every date option, so the custom range was not applied.');return b0}
+function updateDMsg(){const m=$('dMsg');if(!m)return;
+ if(!RANGE.from)m.textContent='Using the dates saved in your Manager reports. Pick From and To, then Apply dates.';
+ else if(PSTYLE===-1)m.textContent='Manager did not accept a custom range from this page, so these figures use the dates saved in the Manager report. To change them, edit the saved report dates in Manager.';
+ else if(PSTYLE!=null)m.textContent='Showing '+RANGE.from+' to '+RANGE.to+'. Balances are as at the To date.';
+ else m.textContent='Dates saved ('+RANGE.from+' to '+RANGE.to+'). They load when this page is opened from Manager.'}
+async function setRange(f,t){
+ if(f&&t&&f>t){$('dMsg').textContent='From date is after To date.';return}
+ RANGE={from:f||'',to:t||''};PSTYLE=null;$('dFrom').value=RANGE.from;$('dTo').value=RANGE.to;
+ try{if(RANGE.from)localStorage.setItem(RK,JSON.stringify(RANGE));else localStorage.removeItem(RK)}catch(e){}
+ if(inManager()){$('dMsg').textContent='Loading figures for the selected dates…';await tryLive()}else updateDMsg()}
+$('dFrom').value=RANGE.from;$('dTo').value=RANGE.to;updateDMsg();
+$('dApply').onclick=()=>{const f=$('dFrom').value,t=$('dTo').value;if(!f||!t){$('dMsg').textContent='Choose both a From and a To date.';return}setRange(f,t)};
+$('dReset').onclick=()=>setRange('','');
+$('dMonth').onclick=()=>{const n=new Date();setRange(ymd(new Date(n.getFullYear(),n.getMonth(),1)),ymd(n))};
+$('dLast').onclick=()=>{const n=new Date();setRange(ymd(new Date(n.getFullYear(),n.getMonth()-1,1)),ymd(new Date(n.getFullYear(),n.getMonth(),0)))};
+$('dFY').onclick=()=>{const n=new Date(),y=n.getMonth()>=3?n.getFullYear():n.getFullYear()-1;setRange(ymd(new Date(y,3,1)),ymd(n))};
+$('d30').onclick=()=>{const n=new Date(),f=new Date(n);f.setDate(f.getDate()-30);setRange(ymd(f),ymd(n))};
+
+/*EXPORT-START*/
+const fmtN=n=>(n<0?'-':'')+Math.abs(Number(n||0)).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+function exportModel(){
+ const m=compute(),S=[],N=x=>Math.round((+x||0)*100)/100,lbl=D.period||'';
+ S.push({name:'Summary',title:'Summary',cols:[34,24],rows:[{c:['Period',lbl||'not set']},{c:['Generated',new Date().toLocaleString('en-IN')]},{c:['']},
+  {c:['Cash & bank',N(m.cash)]},{c:['Receivables',N(m.recv)]},{c:['Credit card outstanding',N(m.cards)]},{c:['Net profit (loss)',N(m.net)]},{c:['Net cash flow',N(m.hasA?m.aNet:m.cfNet)]},
+  {c:['Total assets',N(m.assets)]},{c:['Total liabilities',N(m.liab)]},{c:['Net assets',N(m.netAssets)],b:1}]});
+ if(D.cash.length)S.push({name:'Cash and bank',title:'Cash & bank accounts',cols:[34,18],head:['Account','Balance'],rows:D.cash.map(r=>({c:[r.name,N(r.amount)]})).concat([{c:['Total',N(m.cash)],b:1}])});
+ if(D.cards.length)S.push({name:'Credit cards',title:'Credit card outstanding',cols:[30,16,16,10,14],head:['Card','Outstanding','Limit','Used','Due date'],
+  rows:D.cards.map(r=>({c:[r.name,N(r.amount),N(r.limit),+r.limit>0?Math.round((+r.amount||0)/+r.limit*100)+'%':'',r.due||'']})).concat([{c:['Total',N(m.cards),N(sum('cards','limit')),'',''],b:1}])});
+ if(D.recv.length)S.push({name:'Receivables',title:'Receivables',cols:[36,14,18],head:['Customer','Due date','Amount'],rows:D.recv.map(r=>({c:[r.name,r.due||'',N(r.amount)]})).concat([{c:['Total','',N(m.recv)],b:1}])});
+ if(D.pl.length){const hb=D.pl.some(r=>+r.budget>0),rows=[],grp=(k,l)=>{const rs=D.pl.filter(r=>r.group===k);if(!rs.length)return;rows.push({c:[l,'',''],b:1});rs.forEach(r=>rows.push({c:['   '+r.name,N(r.amount),hb&&+r.budget>0?N(r.budget):'']}));rows.push({c:['Total '+l,N(m.g[k]),''],b:1})};
+  grp('income','Income');grp('cos','Cost of sales');rows.push({c:['Gross profit (loss)',N(m.gross),''],b:1});grp('expense','Expenses');grp('opex','Operating expenses');rows.push({c:['Operating profit (loss)',N(m.op),''],b:1});grp('otherinc','Other income');grp('finance','Finance costs');rows.push({c:['Net profit (loss)',N(m.net),''],b:1});
+  S.push({name:'Profit and loss',title:'Profit & loss',cols:[38,18,16],head:['Account','Amount',hb?'Budget':''],rows})}
+ if(m.assets||m.liab){const rows=[{c:['Assets',''],b:1},{c:['   Cash & bank',N(m.cash)]},{c:['   Receivables',N(m.recv)]}];D.assets.forEach(r=>rows.push({c:['   '+r.name,N(r.amount)]}));rows.push({c:['Total assets',N(m.assets)],b:1},{c:['Liabilities',''],b:1},{c:['   Credit cards',N(m.cards)]});
+  D.loans.forEach(r=>rows.push({c:['   '+r.name,N(r.amount)]}));D.liabs.forEach(r=>rows.push({c:['   '+r.name,N(r.amount)]}));rows.push({c:['Total liabilities',N(m.liab)],b:1},{c:['Net assets',N(m.netAssets)],b:1});
+  S.push({name:'Balance sheet',title:'Balance sheet position',cols:[38,18],head:['Item','Amount'],rows})}
+ if((D.cfa||[]).length)S.push({name:'Cash flow by account',title:'Cash flow by account'+(D.cfPeriod?' ('+D.cfPeriod+')':''),cols:[30,16,16,16,16],head:['Account','Opening','Receipts','Payments','Closing'],
+  rows:D.cfa.map(r=>({c:[r.name,N(r.open),N(r.in),N(r.out),N(r.close)]})).concat([{c:['Total',N(m.aO),N(m.aI),N(m.aU),N(m.aC)],b:1}])});
+ const cf=D.cf.filter(r=>r.month).slice().sort((a,b)=>a.month<b.month?-1:1);
+ if(cf.length)S.push({name:'Cash flow by month',title:'Cash flow by month',cols:[16,16,16,16],head:['Month','Money in','Money out','Net'],rows:cf.map(r=>({c:[r.month,N(r.in),N(r.out),N((+r.in||0)-(+r.out||0))]})).concat([{c:['Total',N(m.cfIn),N(m.cfOut),N(m.cfNet)],b:1}])});
+ return S}
+const xe=v=>String(v==null?'':v).replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g,'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const colL=i=>{let s='';i++;while(i>0){const r=(i-1)%26;s=String.fromCharCode(65+r)+s;i=Math.floor((i-1)/26)}return s};
+const U8=t=>new TextEncoder().encode(t);
+const CRCT=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0}return t})();
+const crc32=b=>{let c=0xFFFFFFFF;for(let i=0;i<b.length;i++)c=CRCT[(c^b[i])&255]^(c>>>8);return(c^0xFFFFFFFF)>>>0};
+function zipStore(files){const parts=[],cd=[];let off=0;
+ files.forEach(f=>{const nm=U8(f.name),d=f.data,crc=crc32(d);
+  const lh=new DataView(new ArrayBuffer(30));lh.setUint32(0,0x04034b50,true);lh.setUint16(4,20,true);lh.setUint16(6,0x0800,true);lh.setUint16(8,0,true);lh.setUint16(10,0,true);lh.setUint16(12,0x21,true);lh.setUint32(14,crc,true);lh.setUint32(18,d.length,true);lh.setUint32(22,d.length,true);lh.setUint16(26,nm.length,true);lh.setUint16(28,0,true);
+  parts.push(new Uint8Array(lh.buffer),nm,d);
+  const ch=new DataView(new ArrayBuffer(46));ch.setUint32(0,0x02014b50,true);ch.setUint16(4,20,true);ch.setUint16(6,20,true);ch.setUint16(8,0x0800,true);ch.setUint16(10,0,true);ch.setUint16(12,0,true);ch.setUint16(14,0x21,true);ch.setUint32(16,crc,true);ch.setUint32(20,d.length,true);ch.setUint32(24,d.length,true);ch.setUint16(28,nm.length,true);ch.setUint32(42,off,true);
+  cd.push(new Uint8Array(ch.buffer),nm);off+=30+nm.length+d.length});
+ let cs=0;cd.forEach(x=>cs+=x.length);
+ const e=new DataView(new ArrayBuffer(22));e.setUint32(0,0x06054b50,true);e.setUint16(8,files.length,true);e.setUint16(10,files.length,true);e.setUint32(12,cs,true);e.setUint32(16,off,true);
+ return new Blob(parts.concat(cd,[new Uint8Array(e.buffer)]),{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'})}
+function buildXlsx(S){
+ const NS='http://schemas.openxmlformats.org/spreadsheetml/2006/main',used=new Set();
+ const names=S.map(x=>{let n=x.name.replace(/[\\\/\?\*\[\]:]/g,'').slice(0,31),k=2;while(used.has(n.toLowerCase())){n=n.slice(0,28)+' '+k++}used.add(n.toLowerCase());return n});
+ const sheet=x=>{const rows=[[{v:x.title,b:1}],[]];if(x.head)rows.push(x.head.map(h=>({v:h,b:1})));x.rows.forEach(r=>rows.push(r.c.map(v=>({v,b:r.b}))));
+  const cell=(c,ri,ci)=>{const ref=colL(ci)+(ri+1);if(typeof c.v==='number')return'<c r="'+ref+'" s="'+(c.b?3:2)+'"><v>'+c.v+'</v></c>';if(c.v===''||c.v==null)return'';return'<c r="'+ref+'" t="inlineStr" s="'+(c.b?1:0)+'"><is><t xml:space="preserve">'+xe(c.v)+'</t></is></c>'};
+  return'<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="'+NS+'"><cols>'+x.cols.map((w,i)=>'<col min="'+(i+1)+'" max="'+(i+1)+'" width="'+w+'" customWidth="1"/>').join('')+'</cols><sheetData>'+rows.map((r,i)=>'<row r="'+(i+1)+'">'+r.map((c,j)=>cell(c,i,j)).join('')+'</row>').join('')+'</sheetData></worksheet>'};
+ const files=[
+  {name:'[Content_Types].xml',data:U8('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>'+S.map((x,i)=>'<Override PartName="/xl/worksheets/sheet'+(i+1)+'.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>').join('')+'</Types>')},
+  {name:'_rels/.rels',data:U8('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>')},
+  {name:'xl/workbook.xml',data:U8('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="'+NS+'" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'+names.map((n,i)=>'<sheet name="'+xe(n)+'" sheetId="'+(i+1)+'" r:id="rId'+(i+1)+'"/>').join('')+'</sheets></workbook>')},
+  {name:'xl/_rels/workbook.xml.rels',data:U8('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+S.map((x,i)=>'<Relationship Id="rId'+(i+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet'+(i+1)+'.xml"/>').join('')+'<Relationship Id="rId'+(S.length+1)+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>')},
+  {name:'xl/styles.xml',data:U8('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="'+NS+'"><numFmts count="1"><numFmt numFmtId="164" formatCode="#,##0.00;[Red]-#,##0.00"/></numFmts><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="4"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/><xf numFmtId="164" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>')}
+ ].concat(S.map((x,i)=>({name:'xl/worksheets/sheet'+(i+1)+'.xml',data:U8(sheet(x))})));
+ return zipStore(files)}
+function buildPdf(S,title,sub){
+ const W=595,H=842,MX=40,RX=555,LH=13,pages=[[]];let y=H-50;
+ const cwid=ch=>ch==='.'||ch===','||ch===' '?278:ch==='-'?333:ch==='R'?722:ch==='s'?500:ch==='%'?889:556;
+ const cv=t=>String(t==null?'':t).replace(/₹/g,'Rs. ').replace(/[–—]/g,'-').replace(/[^\x20-\x7e\xa0-\xff]/g,'?');
+ const tw=(t,sz)=>[...t].reduce((a,c)=>a+cwid(c),0)*sz/1000,esc=t=>t.replace(/[\\()]/g,'\\$&');
+ const pg=()=>pages[pages.length-1];
+ const txt=(t,x,yy,sz,b,right)=>{t=cv(t);if(right)x-=tw(t,sz);pg().push('BT /F'+(b?2:1)+' '+sz+' Tf '+x.toFixed(1)+' '+yy.toFixed(1)+' Td ('+esc(t)+') Tj ET')};
+ const rule=(yy,x1,x2)=>pg().push('0.5 w '+x1+' '+yy.toFixed(1)+' m '+x2+' '+yy.toFixed(1)+' l S');
+ const nl=n=>{y-=n||LH;if(y<55){pages.push([]);y=H-50}};
+ txt(title,MX,y,16,1);nl(18);txt(sub,MX,y,9,0);nl(22);
+ S.forEach(x=>{if(y<130){pages.push([]);y=H-50}
+  txt(x.title,MX,y,11,1);nl(16);
+  const k=x.cols.length,step=k<=3?110:k===4?95:80,right=j=>RX-(k-1-j)*step,maxc=Math.max(10,Math.floor((right(1)-step-MX)/4.7));
+  const line=(c,b)=>{c.forEach((v,j)=>{const t=typeof v==='number'?fmtN(v):String(v==null?'':v);if(j===0)txt(t.length>maxc?t.slice(0,maxc-1)+'…':t,MX,y,9,b);else txt(t,right(j),y,9,b,true)})};
+  if(x.head){line(x.head,1);rule(y-3,MX,RX);nl(15)}
+  x.rows.forEach(r=>{if(r.b)rule(y+10,MX,RX);line(r.c,r.b);nl()});nl(10)});
+ const n=pages.length;pages.forEach((p,i)=>{pages[i].push('BT /F1 8 Tf '+MX+' 25 Td ('+esc(cv(title+' · '+sub+' · Page '+(i+1)+' of '+n))+') Tj ET')});
+ let out='%PDF-1.4\n';const offs=[],add=t=>{offs.push(out.length);out+=t};
+ add('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n');
+ add('2 0 obj\n<< /Type /Pages /Count '+n+' /Kids ['+pages.map((p,i)=>(5+i*2)+' 0 R').join(' ')+'] >>\nendobj\n');
+ add('3 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>\nendobj\n');
+ add('4 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>\nendobj\n');
+ pages.forEach((p,i)=>{const st=p.join('\n');add((5+i*2)+' 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 '+W+' '+H+'] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents '+(6+i*2)+' 0 R >>\nendobj\n');add((6+i*2)+' 0 obj\n<< /Length '+st.length+' >>\nstream\n'+st+'\nendstream\nendobj\n')});
+ const xs=out.length;out+='xref\n0 '+(offs.length+1)+'\n0000000000 65535 f \n'+offs.map(o=>String(o).padStart(10,'0')+' 00000 n \n').join('')+'trailer\n<< /Size '+(offs.length+1)+' /Root 1 0 R >>\nstartxref\n'+xs+'\n%%EOF';
+ const b=new Uint8Array(out.length);for(let i=0;i<out.length;i++)b[i]=out.charCodeAt(i)&255;return new Blob([b],{type:'application/pdf'})}
+/*EXPORT-END*/
+function dl(name,blob){const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();setTimeout(()=>{a.remove();URL.revokeObjectURL(a.href)},2000)}
+const fileStem=()=>'Finance-Dashboard_'+(RANGE.from&&RANGE.to?RANGE.from+'_to_'+RANGE.to:ymd(new Date()));
+$('xXlsx').onclick=()=>{try{dl(fileStem()+'.xlsx',buildXlsx(exportModel()));$('dMsg').textContent='Excel file downloaded. If nothing downloaded, your browser or Manager blocked it; open the page directly in its own tab and try again.'}catch(e){$('dMsg').textContent='Excel export failed: '+e.message}};
+$('xPdf').onclick=()=>{try{dl(fileStem()+'.pdf',buildPdf(exportModel(),'Finance Dashboard',D.period||'no period set'));$('dMsg').textContent='PDF downloaded. If nothing downloaded, your browser or Manager blocked it; open the page directly in its own tab and try again.'}catch(e){$('dMsg').textContent='PDF export failed: '+e.message}};
 $('connect').onclick=tryLive;
 $('clearlog').onclick=()=>{$('diag').textContent=''};
 $('copylog').onclick=()=>{const t=document.createElement('textarea');t.value=$('diag').textContent;document.body.appendChild(t);t.select();let ok=false;try{ok=document.execCommand('copy')}catch(e){}t.remove();$('copylog').textContent=ok?'Copied':'Select the log text and press Ctrl+C'};
@@ -527,7 +654,7 @@ $('importCust').onclick=()=>{const t=parseTable($('pasteCust').value);const m=$(
  if(ni<0||ai<0){m.textContent='Missing Name or Balance column.';return}
  const list=t.data.map(r=>({name:r[ni]||'',amount:money(r[ai])})).filter(a=>a.name&&a.amount);
  const prev=D.recv;D.recv=list.map(a=>({name:a.name,amount:a.amount,due:(prev.find(p=>p.name===a.name)||{}).due||''}));buildEditor();render();m.textContent='Imported '+D.recv.length+' customers with balances.'};
-if(inManager()){log('Inside Manager (build v20). Starting live read…');setTimeout(tryLive,600)}else{log('Opened outside Manager. Live read only works from the Manager button.')}
+if(inManager()){log('Inside Manager (build v23). Starting live read…');setTimeout(tryLive,600)}else{log('Opened outside Manager. Live read only works from the Manager button.')}
 buildEditor();render();
 addEventListener('resize',()=>render());
 </script></body></html>
